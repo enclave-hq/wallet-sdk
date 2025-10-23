@@ -313,6 +313,117 @@
   gap: 1rem;
 }
 
+/* Contract Interaction */
+.contract-section {
+  margin: 2rem 0;
+  padding: 1.5rem;
+  background: #1a1a1a;
+  border-radius: 8px;
+  border: 1px solid #333;
+}
+
+.contract-section h3 {
+  color: #fff;
+  margin-bottom: 1rem;
+  font-size: 1.2rem;
+}
+
+.balance-result {
+  margin-top: 1rem;
+  padding: 1.5rem;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+  border: 1px solid #667eea;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.balance-result strong {
+  display: block;
+  color: #aaa;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.balance-value {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #4ade80;
+  font-family: 'Courier New', monospace;
+}
+
+.transfer-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-group label {
+  color: #aaa;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  border: 1px solid #444;
+  background: #252525;
+  color: #fff;
+  font-family: inherit;
+  font-size: 1rem;
+  transition: all 0.2s;
+}
+
+.input:focus {
+  outline: none;
+  border-color: #667eea;
+  background: #2a2a2a;
+}
+
+.input::placeholder {
+  color: #666;
+}
+
+.input-hint {
+  display: inline-block;
+  margin-top: 0.25rem;
+  color: #888;
+  font-size: 0.85rem;
+}
+
+.link-external {
+  display: inline-block;
+  margin-top: 0.75rem;
+  color: #667eea;
+  text-decoration: none;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.link-external:hover {
+  color: #764ba2;
+  text-decoration: underline;
+}
+
+.event-合约读取 {
+  border-left-color: #4ade80;
+}
+
+.event-合约交易 {
+  border-left-color: #f59e0b;
+}
+
+.event-交易取消 {
+  border-left-color: #ef4444;
+}
+
 /* Error Message */
 .error-message {
   background: #dc26261a;

@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useWallet, useAccount, useConnect, useDisconnect, useSignMessage, useSignTransaction } from '@enclave-hq/wallet-sdk/react'
 import { WalletType, ChainType, ConnectedWallet } from '@enclave-hq/wallet-sdk'
 import { WalletDetector, getEVMWallets, getTronWallets } from '@enclave-hq/wallet-sdk'
+import { ERC20_ABI, getUSDTAddress, getUSDCAddress } from './abis/erc20'
 import './App.css'
 
 function App() {
@@ -18,6 +19,15 @@ function App() {
   const [availableWallets, setAvailableWallets] = useState<any[]>([])
   const [detectionDone, setDetectionDone] = useState(false)
   const [eventLogs, setEventLogs] = useState<Array<{ time: string; type: string; message: string }>>([])
+  
+  // Contract interaction states
+  const [usdtBalance, setUsdtBalance] = useState<string>('')
+  const [isLoadingBalance, setIsLoadingBalance] = useState(false)
+  const [transferTo, setTransferTo] = useState('0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0')
+  const [transferAmount, setTransferAmount] = useState('1')
+  const [isTransferring, setIsTransferring] = useState(false)
+  const [transferTxHash, setTransferTxHash] = useState<string>('')
+  const [contractError, setContractError] = useState<string>('')
 
   // 添加事件日志
   const addLog = (type: string, message: string) => {
@@ -127,6 +137,106 @@ function App() {
       await walletManager.requestSwitchChain(newChainId)
     } catch (error) {
       console.error('Chain switch error:', error)
+    }
+  }
+
+  // 读取 USDT 余额
+  const handleReadUSDTBalance = async () => {
+    if (!chainId || !address) return
+    
+    setIsLoadingBalance(true)
+    setContractError('')
+    
+    try {
+      const usdtAddress = getUSDTAddress(chainId)
+      if (!usdtAddress) {
+        setContractError(`Chain ${chainId} does not have USDT configured`)
+        setIsLoadingBalance(false)
+        return
+      }
+
+      // Read balance using readContract
+      const balance = await walletManager.readContract(
+        usdtAddress,
+        ERC20_ABI,
+        'balanceOf',
+        [address]
+      )
+
+      // Read decimals
+      const decimals = await walletManager.readContract(
+        usdtAddress,
+        ERC20_ABI,
+        'decimals',
+        []
+      )
+
+      // Format balance (USDT typically has 6 decimals, but we read it from contract)
+      const balanceStr = balance.toString()
+      const decimalsNum = Number(decimals)
+      const formattedBalance = (Number(balanceStr) / Math.pow(10, decimalsNum)).toFixed(decimalsNum)
+      
+      setUsdtBalance(formattedBalance)
+      addLog('合约读取', `USDT 余额: ${formattedBalance}`)
+    } catch (error: any) {
+      console.error('Read balance error:', error)
+      setContractError(error.message || 'Failed to read balance')
+    } finally {
+      setIsLoadingBalance(false)
+    }
+  }
+
+  // USDT 转账
+  const handleUSDTTransfer = async () => {
+    if (!chainId || !transferTo || !transferAmount) return
+    
+    setIsTransferring(true)
+    setContractError('')
+    setTransferTxHash('')
+    
+    try {
+      const usdtAddress = getUSDTAddress(chainId)
+      if (!usdtAddress) {
+        setContractError(`Chain ${chainId} does not have USDT configured`)
+        setIsTransferring(false)
+        return
+      }
+
+      // Read decimals first
+      const decimals = await walletManager.readContract(
+        usdtAddress,
+        ERC20_ABI,
+        'decimals',
+        []
+      )
+
+      // Convert amount to wei (considering decimals)
+      const decimalsNum = Number(decimals)
+      const amount = Math.floor(Number(transferAmount) * Math.pow(10, decimalsNum))
+
+      // Write to contract (transfer)
+      const txHash = await walletManager.writeContract(
+        usdtAddress,
+        ERC20_ABI,
+        'transfer',
+        [transferTo, amount.toString()]
+      )
+
+      setTransferTxHash(txHash)
+      addLog('合约交易', `USDT 转账成功: ${txHash.slice(0, 20)}...`)
+      
+      // Refresh balance after a delay
+      setTimeout(() => {
+        handleReadUSDTBalance()
+      }, 2000)
+    } catch (error: any) {
+      console.error('Transfer error:', error)
+      setContractError(error.message || 'Transfer failed')
+      if (error.message?.includes('rejected') || error.message?.includes('denied')) {
+        addLog('交易取消', '用户取消了转账')
+      }
+    } finally {
+      setIsTransferring(false)
     }
   }
 
@@ -374,6 +484,113 @@ function App() {
                   <code className="signature-value">{txSignature}</code>
                 </div>
               )}
+            </div>
+          </section>
+        )}
+
+        {/* 合约交互测试 (仅 EVM) */}
+        {isConnected && account?.chainType === ChainType.EVM && (
+          <section className="section">
+            <h2>📜 Contract Interaction (合约交互)</h2>
+            
+            {/* 读取 USDT 余额 */}
+            <div className="contract-section">
+              <h3>1️⃣ Read Contract - USDT Balance</h3>
+              <div className="info-box">
+                <p>
+                  <strong>当前链:</strong> Chain ID {chainId}
+                </p>
+                <p className="small">
+                  {getUSDTAddress(chainId!)
+                    ? `✅ USDT 合约: ${getUSDTAddress(chainId!)}`
+                    : '❌ 当前链没有配置 USDT 合约地址'}
+                </p>
+              </div>
+              
+              <button
+                onClick={handleReadUSDTBalance}
+                disabled={isLoadingBalance || !getUSDTAddress(chainId!)}
+                className="btn btn-primary"
+              >
+                {isLoadingBalance ? 'Loading...' : '🔍 Read USDT Balance'}
+              </button>
+              
+              {usdtBalance && (
+                <div className="balance-result">
+                  <strong>💰 Your USDT Balance:</strong>
+                  <div className="balance-value">{usdtBalance} USDT</div>
+                </div>
+              )}
+            </div>
+
+            {/* USDT 转账 */}
+            <div className="contract-section">
+              <h3>2️⃣ Write Contract - USDT Transfer</h3>
+              <div className="transfer-form">
+                <div className="form-group">
+                  <label>收款地址 (To Address):</label>
+                  <input
+                    type="text"
+                    value={transferTo}
+                    onChange={(e) => setTransferTo(e.target.value)}
+                    placeholder="0x..."
+                    className="input"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>转账数量 (Amount):</label>
+                  <input
+                    type="number"
+                    value={transferAmount}
+                    onChange={(e) => setTransferAmount(e.target.value)}
+                    placeholder="1.0"
+                    min="0"
+                    step="0.000001"
+                    className="input"
+                  />
+                  <span className="input-hint">USDT</span>
+                </div>
+                <button
+                  onClick={handleUSDTTransfer}
+                  disabled={isTransferring || !transferTo || !transferAmount || !getUSDTAddress(chainId!)}
+                  className="btn btn-primary"
+                >
+                  {isTransferring ? 'Transferring...' : '💸 Transfer USDT'}
+                </button>
+              </div>
+
+              {transferTxHash && (
+                <div className="signature-result">
+                  <strong>✅ Transaction Hash:</strong>
+                  <code className="signature-value">{transferTxHash}</code>
+                  <a
+                    href={`https://etherscan.io/tx/${transferTxHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="link-external"
+                  >
+                    View on Etherscan →
+                  </a>
+                </div>
+              )}
+            </div>
+
+            {contractError && (
+              <div className="error-message">
+                <strong>⚠️ Error:</strong> {contractError}
+              </div>
+            )}
+
+            <div className="info-box" style={{ marginTop: '1.5rem' }}>
+              <p className="small">
+                💡 <strong>提示:</strong> 
+                <br />
+                • readContract: 免费读取链上数据 (balanceOf, decimals, etc.)
+                <br />
+                • writeContract: 发送交易修改链上状态 (transfer, approve, etc.)
+                <br />
+                • 确保钱包有足够的原生代币支付 Gas 费用
+              </p>
             </div>
           </section>
         )}
