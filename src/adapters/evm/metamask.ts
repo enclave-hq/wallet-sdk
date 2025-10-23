@@ -2,7 +2,7 @@
  * MetaMask 适配器
  */
 
-import { createWalletClient, createPublicClient, custom, http, type WalletClient, type PublicClient } from 'viem'
+import { createWalletClient, createPublicClient, custom, type WalletClient, type PublicClient } from 'viem'
 import { BrowserWalletAdapter } from '../base/browser-wallet-adapter'
 import {
   WalletType,
@@ -70,9 +70,10 @@ export class MetaMaskAdapter extends BrowserWalletAdapter {
 
       const finalChainId = chainId || parsedChainId
 
+      // 使用 MetaMask provider 作为 transport，确保使用正确的 RPC
       this.publicClient = createPublicClient({
         chain: this.getViemChain(finalChainId) as any,
-        transport: http(),
+        transport: custom(provider),
       }) as any
 
       // 创建账户信息
