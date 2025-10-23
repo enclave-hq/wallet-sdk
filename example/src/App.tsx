@@ -29,16 +29,16 @@ function App() {
   const [transferTxHash, setTransferTxHash] = useState<string>('')
   const [contractError, setContractError] = useState<string>('')
 
-  // 添加事件日志
+  // Add event log
   const addLog = (type: string, message: string) => {
     const time = new Date().toLocaleTimeString()
-    setEventLogs(prev => [{ time, type, message }, ...prev].slice(0, 10)) // 只保留最近 10 条
+    setEventLogs(prev => [{ time, type, message }, ...prev].slice(0, 10)) // Keep only last 10 logs
   }
 
-  // 获取区块浏览器链接
+  // Get block explorer URL based on chain
   const getBlockExplorerUrl = (txHash: string, currentChainId: number, currentChainType: string): { url: string; name: string } => {
     if (currentChainType === ChainType.TRON) {
-      // Tron 链
+      // Tron chains
       if (currentChainId === 195) {
         return { url: `https://tronscan.org/#/transaction/${txHash}`, name: 'Tronscan' }
       } else if (currentChainId === 2494104990) {
@@ -47,7 +47,7 @@ function App() {
       return { url: `https://tronscan.org/#/transaction/${txHash}`, name: 'Tronscan' }
     }
 
-    // EVM 链
+    // EVM chains
     switch (currentChainId) {
       case 1:
         return { url: `https://etherscan.io/tx/${txHash}`, name: 'Etherscan' }
@@ -88,33 +88,33 @@ function App() {
     }
   }
 
-  // 检测钱包
+  // Detect wallets
   const detectWallets = async () => {
     const detector = new WalletDetector()
     
-    // 先快速检测一次
+    // Quick detection first
     let wallets = await detector.detectAllWallets()
     setAvailableWallets(wallets)
     
-    // 如果 TronLink 未检测到，等待并重试（TronLink 注入是异步的）
+    // If TronLink not detected, wait and retry (TronLink injection is async)
     const tronLinkWallet = wallets.find(w => w.walletType === WalletType.TRONLINK)
     if (!tronLinkWallet?.isAvailable) {
-      addLog('检测中', '等待 TronLink 加载...')
+      addLog('Detecting', 'Waiting for TronLink...')
       const isTronLinkAvailable = await detector.waitForWallet(WalletType.TRONLINK, 3000)
       if (isTronLinkAvailable) {
-        addLog('检测成功', 'TronLink 已就绪')
-        // 重新检测所有钱包
+        addLog('Success', 'TronLink is ready')
+        // Re-detect all wallets
         wallets = await detector.detectAllWallets()
         setAvailableWallets(wallets)
       } else {
-        addLog('检测失败', 'TronLink 未安装或未启用')
+        addLog('Failed', 'TronLink not installed or not enabled')
       }
     }
     
     setDetectionDone(true)
   }
 
-  // 连接钱包
+  // Connect wallet
   const handleConnect = async (type: WalletType) => {
     try {
       await connect(type)
@@ -123,7 +123,7 @@ function App() {
     }
   }
 
-  // 连接额外的钱包
+  // Connect additional wallet
   const handleConnectAdditional = async (type: WalletType) => {
     try {
       await connectAdditional(type)
@@ -132,7 +132,7 @@ function App() {
     }
   }
 
-  // 断开连接
+  // Disconnect wallet
   const handleDisconnect = async () => {
     try {
       await disconnect()
@@ -142,7 +142,7 @@ function App() {
     }
   }
 
-  // 签名消息
+  // Sign message
   const handleSignMessage = async () => {
     try {
       const sig = await signMessage(messageToSign)
@@ -152,30 +152,30 @@ function App() {
     }
   }
 
-  // 签名交易
+  // Sign transaction
   const handleSignTransaction = async () => {
     try {
-      // 根据当前钱包类型创建不同的测试交易
+      // Create different test transactions based on current wallet type
       if (account?.chainType === ChainType.EVM) {
-        // EVM 交易示例
+        // EVM transaction example
         const tx = {
-          to: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0', // 测试地址
+          to: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0', // Test address
           value: '0x0', // 0 ETH
-          data: '0x', // 空数据
+          data: '0x', // Empty data
         }
         const sig = await signTransaction(tx)
         setTxSignature(sig)
       } else if (account?.chainType === ChainType.TRON) {
-        // Tron 交易示例 - 需要一个完整的交易对象
-        // 注意：这里需要一个真实的 Tron 交易对象
-        alert('Tron 交易签名需要先创建一个完整的交易对象。请使用 TronWeb 的 API 创建交易，然后调用 signTransaction。')
+        // Tron transaction example - requires a complete transaction object
+        // Note: This requires a real Tron transaction object
+        alert('Tron transaction signing requires creating a complete transaction object first. Please use TronWeb API to create a transaction, then call signTransaction.')
       }
     } catch (error) {
       console.error('Sign transaction error:', error)
     }
   }
 
-  // 切换主钱包
+  // Switch primary wallet
   const handleSwitchPrimary = async (chainType: ChainType) => {
     try {
       await switchPrimaryWallet(chainType)
@@ -184,7 +184,7 @@ function App() {
     }
   }
 
-  // 切换链（仅 EVM）
+  // Switch chain (EVM only)
   const handleSwitchChain = async (newChainId: number) => {
     try {
       await walletManager.requestSwitchChain(newChainId)
@@ -193,7 +193,7 @@ function App() {
     }
   }
 
-  // 读取 USDT 余额
+  // Read USDT balance
   const handleReadUSDTBalance = async () => {
     if (!chainId || !address) return
     
@@ -230,7 +230,7 @@ function App() {
       const formattedBalance = (Number(balanceStr) / Math.pow(10, decimalsNum)).toFixed(decimalsNum)
       
       setUsdtBalance(formattedBalance)
-      addLog('合约读取', `USDT 余额: ${formattedBalance}`)
+      addLog('Contract Read', `USDT Balance: ${formattedBalance}`)
     } catch (error: any) {
       console.error('Read balance error:', error)
       setContractError(error.message || 'Failed to read balance')
@@ -239,7 +239,7 @@ function App() {
     }
   }
 
-  // USDT 转账
+  // USDT transfer
   const handleUSDTTransfer = async () => {
     if (!chainId || !transferTo || !transferAmount || !account?.chainType) return
     
@@ -255,17 +255,17 @@ function App() {
         return
       }
 
-      // 验证地址格式
+      // Validate address format
       const trimmedAddress = transferTo.trim()
       if (account.chainType === ChainType.EVM) {
-        // EVM 地址验证
+        // EVM address validation
         if (!trimmedAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
           setContractError('Invalid EVM address format. Expected: 0x followed by 40 hex characters')
           setIsTransferring(false)
           return
         }
       } else if (account.chainType === ChainType.TRON) {
-        // Tron 地址验证
+        // Tron address validation
         if (!trimmedAddress.match(/^T[a-zA-Z0-9]{33}$/)) {
           setContractError('Invalid Tron address format. Expected: T followed by 33 characters')
           setIsTransferring(false)
@@ -294,7 +294,7 @@ function App() {
       )
 
       setTransferTxHash(txHash)
-      addLog('合约交易', `USDT 转账成功: ${txHash.slice(0, 20)}...`)
+      addLog('Contract Transaction', `USDT Transfer Successful: ${txHash.slice(0, 20)}...`)
       
       // Refresh balance after a delay
       setTimeout(() => {
@@ -304,45 +304,45 @@ function App() {
       console.error('Transfer error:', error)
       setContractError(error.message || 'Transfer failed')
       if (error.message?.includes('rejected') || error.message?.includes('denied')) {
-        addLog('交易取消', '用户取消了转账')
+        addLog('Transaction Cancelled', 'User cancelled the transfer')
       }
     } finally {
       setIsTransferring(false)
     }
   }
 
-  // 监听钱包事件
+  // Listen to wallet events
   React.useEffect(() => {
     if (!walletManager) return
 
     const handleAccountChanged = (newAccount: any) => {
       if (newAccount) {
-        addLog('账户切换', `新账户: ${newAccount.nativeAddress.slice(0, 10)}...`)
+        addLog('Account Changed', `New account: ${newAccount.nativeAddress.slice(0, 10)}...`)
       } else {
-        addLog('账户断开', '钱包已断开或锁定')
+        addLog('Account Disconnected', 'Wallet disconnected or locked')
       }
     }
 
     const handleChainChanged = (chainId: number) => {
-      addLog('链切换', `切换到链 ID: ${chainId}`)
+      addLog('Chain Changed', `Switched to chain ID: ${chainId}`)
     }
 
     const handlePrimaryWalletSwitched = (newPrimary: any, oldPrimary: any, chainType: string) => {
-      addLog('主钱包切换', `从 ${oldPrimary?.chainType || 'N/A'} 切换到 ${chainType}`)
+      addLog('Primary Wallet Switched', `From ${oldPrimary?.chainType || 'N/A'} to ${chainType}`)
     }
 
     const handleDisconnected = () => {
-      addLog('断开连接', '钱包已断开')
+      addLog('Disconnected', 'Wallet disconnected')
     }
 
-    // 注册事件监听
+    // Register event listeners
     walletManager.on('accountChanged', handleAccountChanged)
     walletManager.on('chainChanged', handleChainChanged)
     walletManager.on('primaryWalletSwitched', handlePrimaryWalletSwitched)
     walletManager.on('disconnected', handleDisconnected)
 
     return () => {
-      // 清理事件监听
+      // Cleanup event listeners
       walletManager.off('accountChanged', handleAccountChanged)
       walletManager.off('chainChanged', handleChainChanged)
       walletManager.off('primaryWalletSwitched', handlePrimaryWalletSwitched)
@@ -362,7 +362,7 @@ function App() {
       </header>
 
       <main className="App-main">
-        {/* 钱包状态 */}
+        {/* Wallet Status */}
         <section className="section">
           <h2>📊 Wallet Status</h2>
           <div className="status-card">
@@ -395,7 +395,7 @@ function App() {
           </div>
         </section>
 
-        {/* 钱包检测 */}
+        {/* Wallet Detection */}
         {!isConnected && (
           <section className="section">
             <h2>🔍 Available Wallets</h2>
@@ -443,7 +443,7 @@ function App() {
                   </div>
                 </div>
                 <button onClick={detectWallets} className="btn btn-secondary" style={{ marginTop: '1rem' }}>
-                  🔄 重新检测钱包
+                  🔄 Re-detect Wallets
                 </button>
               </>
             )}
@@ -453,7 +453,7 @@ function App() {
           </section>
         )}
 
-        {/* 已连接的钱包 */}
+        {/* Connected Wallets */}
         {isConnected && connectedWallets.length > 0 && (
           <section className="section">
             <h2>💼 Connected Wallets ({connectedWallets.length})</h2>
@@ -495,10 +495,10 @@ function App() {
           </section>
         )}
 
-        {/* 消息签名测试 */}
+        {/* Message Signing Test */}
         {isConnected && (
           <section className="section">
-            <h2>✍️ Sign Message (消息签名)</h2>
+            <h2>✍️ Sign Message</h2>
             <div className="sign-container">
               <textarea
                 value={messageToSign}
@@ -527,19 +527,19 @@ function App() {
           </section>
         )}
 
-        {/* 交易签名测试 */}
+        {/* Transaction Signing Test */}
         {isConnected && (
           <section className="section">
-            <h2>🔏 Sign Transaction (交易签名)</h2>
+            <h2>🔏 Sign Transaction</h2>
             <div className="sign-container">
               <div className="info-box">
                 <p>
-                  <strong>当前钱包类型:</strong> {account?.chainType?.toUpperCase()}
+                  <strong>Current Wallet Type:</strong> {account?.chainType?.toUpperCase()}
                 </p>
                 <p className="small">
                   {account?.chainType === ChainType.EVM
-                    ? '✅ EVM 钱包 - 将签名一个测试交易'
-                    : '⚠️ Tron 钱包 - 需要完整的交易对象'}
+                    ? '✅ EVM Wallet - Will sign a test transaction'
+                    : '⚠️ Tron Wallet - Requires complete transaction object'}
                 </p>
               </div>
               <button
@@ -559,22 +559,22 @@ function App() {
           </section>
         )}
 
-        {/* 合约交互测试 (EVM & TRON) */}
+        {/* Contract Interaction (EVM & TRON) */}
         {isConnected && (
           <section className="section">
-            <h2>📜 Contract Interaction (合约交互) - {account?.chainType?.toUpperCase()}</h2>
+            <h2>📜 Contract Interaction - {account?.chainType?.toUpperCase()}</h2>
             
-            {/* 读取 USDT 余额 */}
+            {/* Read USDT Balance */}
             <div className="contract-section">
               <h3>1️⃣ Read Contract - USDT Balance</h3>
               <div className="info-box">
                 <p>
-                  <strong>当前链:</strong> Chain ID {chainId}
+                  <strong>Current Chain:</strong> Chain ID {chainId}
                 </p>
                 <p className="small">
                   {getUSDTAddress(chainId!)
-                    ? `✅ USDT 合约: ${getUSDTAddress(chainId!)}`
-                    : '❌ 当前链没有配置 USDT 合约地址'}
+                    ? `✅ USDT Contract: ${getUSDTAddress(chainId!)}`
+                    : '❌ Current chain has no USDT contract configured'}
                 </p>
               </div>
               
@@ -594,12 +594,12 @@ function App() {
               )}
             </div>
 
-            {/* USDT 转账 */}
+            {/* USDT Transfer */}
             <div className="contract-section">
               <h3>2️⃣ Write Contract - USDT Transfer</h3>
               <div className="transfer-form">
                 <div className="form-group">
-                  <label>收款地址 (To Address):</label>
+                  <label>Recipient Address:</label>
                   <input
                     type="text"
                     value={transferTo}
@@ -613,12 +613,12 @@ function App() {
                   />
                   <span className="input-hint">
                     {account?.chainType === ChainType.TRON 
-                      ? '⚠️ Tron 地址格式: T + 33字符 (Base58)' 
-                      : '⚠️ EVM 地址格式: 0x + 40 hex 字符'}
+                      ? '⚠️ Tron address format: T + 33 characters (Base58)' 
+                      : '⚠️ EVM address format: 0x + 40 hex characters'}
                   </span>
                 </div>
                 <div className="form-group">
-                  <label>转账数量 (Amount):</label>
+                  <label>Amount:</label>
                   <input
                     type="number"
                     value={transferAmount}
@@ -668,20 +668,20 @@ function App() {
 
             <div className="info-box" style={{ marginTop: '1.5rem' }}>
               <p className="small">
-                💡 <strong>提示:</strong> 
+                💡 <strong>Tips:</strong> 
                 <br />
-                • readContract: 免费读取链上数据 (balanceOf, decimals, etc.)
+                • readContract: Free on-chain data reading (balanceOf, decimals, etc.)
                 <br />
-                • writeContract: 发送交易修改链上状态 (transfer, approve, etc.)
+                • writeContract: Send transactions to modify on-chain state (transfer, approve, etc.)
                 <br />
-                • 确保钱包有足够的原生代币支付费用 
+                • Ensure wallet has sufficient native tokens for gas fees 
                 {account?.chainType === ChainType.EVM ? '(ETH/BNB/MATIC)' : '(TRX/Energy)'}
               </p>
             </div>
           </section>
         )}
 
-        {/* 链切换（仅 EVM） */}
+        {/* Chain Switch (EVM Only) */}
         {isConnected && account?.chainType === ChainType.EVM && (
           <section className="section">
             <h2>🔄 Switch Chain (EVM Only)</h2>
@@ -702,7 +702,7 @@ function App() {
           </section>
         )}
 
-        {/* 连接额外钱包 */}
+        {/* Connect Additional Wallet */}
         {isConnected && (
           <section className="section">
             <h2>➕ Connect Additional Wallet</h2>
@@ -723,7 +723,7 @@ function App() {
           </section>
         )}
 
-        {/* 断开连接 */}
+        {/* Disconnect */}
         {isConnected && (
           <section className="section">
             <button
@@ -736,12 +736,12 @@ function App() {
           </section>
         )}
 
-        {/* 事件日志 */}
+        {/* Event Log */}
         <section className="section">
-          <h2>📡 Event Log (实时监听)</h2>
+          <h2>📡 Event Log (Real-time)</h2>
           <div className="event-log">
             {eventLogs.length === 0 ? (
-              <p className="event-log-empty">等待钱包事件...</p>
+              <p className="event-log-empty">Waiting for wallet events...</p>
             ) : (
               eventLogs.map((log, index) => (
                 <div key={index} className={`event-log-item event-${log.type}`}>
@@ -753,11 +753,11 @@ function App() {
             )}
           </div>
           <div className="event-log-hint">
-            <p>💡 提示：</p>
+            <p>💡 Tips:</p>
             <ul>
-              <li>在 MetaMask 中切换账户 → 自动检测并显示</li>
-              <li>在 MetaMask 中切换网络 → 自动检测并显示</li>
-              <li>点击"Set as Primary"切换主钱包 → 显示切换事件</li>
+              <li>Switch accounts in MetaMask → Automatically detected and displayed</li>
+              <li>Switch networks in MetaMask → Automatically detected and displayed</li>
+              <li>Click "Set as Primary" to switch primary wallet → Display switch event</li>
             </ul>
           </div>
         </section>
