@@ -1,0 +1,30 @@
+# Source files
+src/
+example/
+tests/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Config files
+tsconfig.json
+tsconfig.*.json
+tsup.config.ts
+vite.config.ts
+.eslintrc.*
+.prettierrc.*
+
+# Development
+.git/
+.github/
+.vscode/
+.idea/
+*.log
+node_modules/
+
+# Build artifacts
+*.tsbuildinfo
+.cache/
+

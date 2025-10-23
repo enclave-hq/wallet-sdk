@@ -1,0 +1,77 @@
+{
+  "name": "@enclave-hq/wallet-sdk",
+  "version": "1.0.0",
+  "description": "Multi-chain wallet adapter for Enclave - supports EVM and Tron ecosystems",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react/index.mjs",
+      "require": "./dist/react/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "eslint src --ext .ts,.tsx",
+    "type-check": "tsc --noEmit",
+    "example": "cd example && npm run dev",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "enclave",
+    "wallet",
+    "ethereum",
+    "tron",
+    "evm",
+    "multi-chain",
+    "metamask",
+    "tronlink",
+    "walletconnect",
+    "web3",
+    "blockchain"
+  ],
+  "author": "Enclave Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/enclave-hq/enclave.git",
+    "directory": "wallet-sdk"
+  },
+  "dependencies": {
+    "@enclave-hq/chain-utils": "^1.0.0",
+    "eventemitter3": "^5.0.1",
+    "viem": "^2.21.45"
+  },
+  "peerDependencies": {
+    "react": ">=16.8.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.3",
+    "@typescript-eslint/eslint-plugin": "^7.13.0",
+    "@typescript-eslint/parser": "^7.13.0",
+    "eslint": "^8.57.0",
+    "react": "^18.3.1",
+    "tsup": "^8.1.0",
+    "typescript": "^5.4.5"
+  }
+}
+
