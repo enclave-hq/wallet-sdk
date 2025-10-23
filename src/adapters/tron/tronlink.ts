@@ -8,9 +8,12 @@ import {
   ChainType,
   WalletState,
   Account,
+  ContractReadParams,
+  ContractWriteParams,
+  TransactionReceipt,
 } from '../../core/types'
 import { createUniversalAddress } from '../../utils/address/universal-address'
-import { ConnectionRejectedError, SignatureRejectedError } from '../../core/errors'
+import { ConnectionRejectedError, SignatureRejectedError, TransactionFailedError } from '../../core/errors'
 
 /**
  * TronLink 适配器
@@ -148,6 +151,113 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
       }
       
       throw error
+    }
+  }
+
+  /**
+   * 读取合约
+   */
+  async readContract<T = any>(params: ContractReadParams): Promise<T> {
+    this.ensureConnected()
+
+    try {
+      const tronWeb = this.getTronWeb()
+      
+      // 获取合约实例
+      const contract = await tronWeb.contract(params.abi, params.address)
+      
+      // 调用合约方法（只读）
+      const result = await contract[params.functionName](...(params.args || [])).call()
+      
+      return result as T
+    } catch (error: any) {
+      console.error('Read contract error:', error)
+      throw new Error(`Failed to read contract: ${error.message}`)
+    }
+  }
+
+  /**
+   * 写入合约
+   */
+  async writeContract(params: ContractWriteParams): Promise<string> {
+    this.ensureConnected()
+
+    try {
+      const tronWeb = this.getTronWeb()
+      
+      // 获取合约实例
+      const contract = await tronWeb.contract(params.abi, params.address)
+      
+      // 准备交易选项
+      const options: any = {}
+      if (params.value) {
+        options.callValue = params.value
+      }
+      if (params.gas) {
+        options.feeLimit = params.gas
+      }
+      
+      // 调用合约方法（写入）
+      const transaction = await contract[params.functionName](...(params.args || [])).send(options)
+      
+      // 返回交易哈希
+      return transaction || ''
+    } catch (error: any) {
+      console.error('Write contract error:', error)
+      
+      if (error.message?.includes('User rejected') || error.message?.includes('Confirmation declined')) {
+        throw new SignatureRejectedError('Transaction was rejected by user')
+      }
+      
+      throw new Error(`Failed to write contract: ${error.message}`)
+    }
+  }
+
+  /**
+   * 等待交易确认
+   */
+  async waitForTransaction(txHash: string, _confirmations: number = 1): Promise<TransactionReceipt> {
+    try {
+      const tronWeb = this.getTronWeb()
+      
+      // 等待交易确认
+      let attempts = 0
+      const maxAttempts = 60 // 最多等待 60 秒
+      
+      while (attempts < maxAttempts) {
+        try {
+          const txInfo = await tronWeb.trx.getTransactionInfo(txHash)
+          
+          if (txInfo && txInfo.id) {
+            // 交易已确认
+            const receipt: TransactionReceipt = {
+              transactionHash: txHash,
+              blockNumber: txInfo.blockNumber || 0,
+              blockHash: txInfo.blockHash || '',
+              from: this.currentAccount!.nativeAddress,
+              to: txInfo.contract_address || '',
+              status: txInfo.receipt?.result === 'SUCCESS' ? 'success' : 'failed',
+              gasUsed: (txInfo.receipt?.energy_usage_total || 0).toString(),
+              logs: txInfo.log || [],
+            }
+            
+            if (receipt.status === 'failed') {
+              throw new TransactionFailedError(txHash, 'Transaction failed on Tron network')
+            }
+            
+            return receipt
+          }
+        } catch (error) {
+          // 交易可能还未确认，继续等待
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        attempts++
+      }
+      
+      throw new Error('Transaction confirmation timeout')
+    } catch (error: any) {
+      throw new Error(`Failed to wait for transaction: ${error.message}`)
     }
   }
 

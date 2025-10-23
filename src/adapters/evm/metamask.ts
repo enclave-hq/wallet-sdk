@@ -62,17 +62,19 @@ export class MetaMaskAdapter extends BrowserWalletAdapter {
         await this.switchChain(chainId)
       }
 
-      // 创建客户端
+      const finalChainId = chainId || parsedChainId
+      const viemChain = this.getViemChain(finalChainId) as any
+
+      // 创建客户端 (需要指定 chain 以支持 writeContract)
       this.walletClient = createWalletClient({
         account: accounts[0] as `0x${string}`,
+        chain: viemChain,
         transport: custom(provider),
       })
 
-      const finalChainId = chainId || parsedChainId
-
       // 使用 MetaMask provider 作为 transport，确保使用正确的 RPC
       this.publicClient = createPublicClient({
-        chain: this.getViemChain(finalChainId) as any,
+        chain: viemChain,
         transport: custom(provider),
       }) as any
 

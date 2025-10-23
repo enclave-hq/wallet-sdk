@@ -488,10 +488,10 @@ function App() {
           </section>
         )}
 
-        {/* 合约交互测试 (仅 EVM) */}
-        {isConnected && account?.chainType === ChainType.EVM && (
+        {/* 合约交互测试 (EVM & TRON) */}
+        {isConnected && (
           <section className="section">
-            <h2>📜 Contract Interaction (合约交互)</h2>
+            <h2>📜 Contract Interaction (合约交互) - {account?.chainType?.toUpperCase()}</h2>
             
             {/* 读取 USDT 余额 */}
             <div className="contract-section">
@@ -533,7 +533,7 @@ function App() {
                     type="text"
                     value={transferTo}
                     onChange={(e) => setTransferTo(e.target.value)}
-                    placeholder="0x..."
+                    placeholder={account?.chainType === ChainType.TRON ? 'T...' : '0x...'}
                     className="input"
                   />
                 </div>
@@ -563,14 +563,25 @@ function App() {
                 <div className="signature-result">
                   <strong>✅ Transaction Hash:</strong>
                   <code className="signature-value">{transferTxHash}</code>
-                  <a
-                    href={`https://etherscan.io/tx/${transferTxHash}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="link-external"
-                  >
-                    View on Etherscan →
-                  </a>
+                  {account?.chainType === ChainType.TRON ? (
+                    <a
+                      href={`https://tronscan.org/#/transaction/${transferTxHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="link-external"
+                    >
+                      View on Tronscan →
+                    </a>
+                  ) : (
+                    <a
+                      href={`https://etherscan.io/tx/${transferTxHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="link-external"
+                    >
+                      View on Block Explorer →
+                    </a>
+                  )}
                 </div>
               )}
             </div>
@@ -589,7 +600,8 @@ function App() {
                 <br />
                 • writeContract: 发送交易修改链上状态 (transfer, approve, etc.)
                 <br />
-                • 确保钱包有足够的原生代币支付 Gas 费用
+                • 确保钱包有足够的原生代币支付费用 
+                {account?.chainType === ChainType.EVM ? '(ETH/BNB/MATIC)' : '(TRX/Energy)'}
               </p>
             </div>
           </section>
