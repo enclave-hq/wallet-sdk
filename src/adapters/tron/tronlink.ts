@@ -81,6 +81,10 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
 
   /**
    * 签名消息
+   * 
+   * Note: TronLink supports two signing methods:
+   * - trx.sign(): Signs a transaction object
+   * - trx.signMessageV2(): Signs a plain text message (what we use here)
    */
   async signMessage(message: string): Promise<string> {
     this.ensureConnected()
@@ -88,14 +92,29 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
     try {
       const tronWeb = this.getTronWeb()
 
-      // TronLink 使用 tronWeb.trx.sign 签名消息
-      const signature = await tronWeb.trx.sign(message)
-
-      return signature
+      // Use signMessageV2 for plain text message signing (not transaction signing)
+      // This is equivalent to personal_sign in EVM
+      if (typeof tronWeb.trx.signMessageV2 === 'function') {
+        // signMessageV2 returns a hex signature
+        const signature = await tronWeb.trx.signMessageV2(message)
+        return signature
+      } else {
+        // Fallback to older method if signMessageV2 not available
+        // Note: This might not work correctly for message signing
+        console.warn('[TronLink] signMessageV2 not available, falling back to sign()')
+        const signature = await tronWeb.trx.sign(message)
+        return signature
+      }
     } catch (error: any) {
       if (error.message?.includes('User rejected') || error.message?.includes('Confirmation declined')) {
         throw new SignatureRejectedError()
       }
+      
+      // Better error message for invalid input
+      if (error.message?.includes('Invalid transaction')) {
+        throw new Error('Invalid message format. For transaction signing, use signTransaction() instead.')
+      }
+      
       throw error
     }
   }
