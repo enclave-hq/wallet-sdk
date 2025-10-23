@@ -120,6 +120,38 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
   }
 
   /**
+   * 签名交易
+   * 
+   * Note: This uses trx.sign() which is specifically for signing transaction objects.
+   * For plain text message signing, use signMessage() instead.
+   */
+  async signTransaction(transaction: any): Promise<string> {
+    this.ensureConnected()
+
+    try {
+      const tronWeb = this.getTronWeb()
+
+      // TronLink's trx.sign() expects a transaction object
+      // The transaction should be properly formatted with fields like:
+      // - txID, raw_data, raw_data_hex, etc.
+      const signature = await tronWeb.trx.sign(transaction)
+
+      return signature
+    } catch (error: any) {
+      if (error.message?.includes('User rejected') || error.message?.includes('Confirmation declined')) {
+        throw new SignatureRejectedError('Transaction signature was rejected by user')
+      }
+      
+      // Better error message for invalid input
+      if (error.message?.includes('Invalid transaction')) {
+        throw new Error('Invalid transaction format. Please provide a properly formatted Tron transaction object.')
+      }
+      
+      throw error
+    }
+  }
+
+  /**
    * 获取 Provider
    */
   getProvider(): any {

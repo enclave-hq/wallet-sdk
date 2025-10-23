@@ -85,7 +85,7 @@ export interface IWalletAdapter {
   
   // 签名
   signMessage(message: string): Promise<string>
-  signTransaction?(transaction: any): Promise<string>
+  signTransaction?(transaction: Transaction): Promise<string>
   signTypedData?(typedData: any): Promise<string>
   
   // 链切换（仅 EVM 支持）
@@ -126,6 +126,37 @@ export interface ContractWriteParams extends ContractReadParams {
   gas?: number
   gasPrice?: string
 }
+
+/**
+ * EVM 交易参数
+ */
+export interface EVMTransaction {
+  to: string
+  value?: string | bigint
+  data?: string
+  gas?: string | bigint
+  gasPrice?: string | bigint
+  maxFeePerGas?: string | bigint
+  maxPriorityFeePerGas?: string | bigint
+  nonce?: number
+  chainId?: number
+}
+
+/**
+ * Tron 交易参数
+ */
+export interface TronTransaction {
+  // Tron 交易格式
+  txID?: string
+  raw_data?: any
+  raw_data_hex?: string
+  visible?: boolean
+}
+
+/**
+ * 通用交易类型
+ */
+export type Transaction = EVMTransaction | TronTransaction
 
 /**
  * 交易回执

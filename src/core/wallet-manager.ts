@@ -295,6 +295,41 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
     return adapter.signTypedData(typedData)
   }
 
+  /**
+   * 签名交易（使用主钱包）
+   */
+  async signTransaction(transaction: any): Promise<string> {
+    if (!this.primaryWallet) {
+      throw new WalletNotConnectedError()
+    }
+
+    if (!this.primaryWallet.signTransaction) {
+      throw new Error(`signTransaction not supported by ${this.primaryWallet.type}`)
+    }
+
+    return this.primaryWallet.signTransaction(transaction)
+  }
+
+  /**
+   * 使用指定链类型的钱包签名交易
+   */
+  async signTransactionWithChainType(transaction: any, chainType?: ChainType): Promise<string> {
+    if (!chainType) {
+      return this.signTransaction(transaction)
+    }
+
+    const adapter = this.connectedWallets.get(chainType)
+    if (!adapter) {
+      throw new WalletNotConnectedError(`Wallet for chain type ${chainType}`)
+    }
+
+    if (!adapter.signTransaction) {
+      throw new Error(`signTransaction not supported by ${adapter.type}`)
+    }
+
+    return adapter.signTransaction(transaction)
+  }
+
   // ===== 链切换 =====
 
   /**

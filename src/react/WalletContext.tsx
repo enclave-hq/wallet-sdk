@@ -22,6 +22,7 @@ export interface WalletContextValue {
   disconnect: () => Promise<void>
   switchPrimaryWallet: (chainType: ChainType) => Promise<Account>
   signMessage: (message: string) => Promise<string>
+  signTransaction: (transaction: any) => Promise<string>
 }
 
 /**
@@ -85,6 +86,11 @@ export function WalletProvider({ children, walletManager: externalWalletManager 
     return walletManager.signMessage(message)
   }, [walletManager])
 
+  // 签名交易
+  const signTransaction = useCallback(async (transaction: any) => {
+    return walletManager.signTransaction(transaction)
+  }, [walletManager])
+
   // 监听事件
   useEffect(() => {
     const handleAccountChanged = (newAccount: Account | null) => {
@@ -134,6 +140,7 @@ export function WalletProvider({ children, walletManager: externalWalletManager 
     disconnect,
     switchPrimaryWallet,
     signMessage,
+    signTransaction,
   }
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>

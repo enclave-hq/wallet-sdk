@@ -243,6 +243,26 @@
   gap: 1rem;
 }
 
+.info-box {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.info-box p {
+  margin: 0.5rem 0;
+  color: #ccc;
+}
+
+.info-box p.small {
+  font-size: 0.9rem;
+  color: #aaa;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #333;
+}
+
 .textarea {
   width: 100%;
   padding: 1rem;

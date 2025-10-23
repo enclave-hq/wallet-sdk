@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { useWallet, useAccount, useConnect, useDisconnect, useSignMessage } from '@enclave-hq/wallet-sdk/react'
+import { useWallet, useAccount, useConnect, useDisconnect, useSignMessage, useSignTransaction } from '@enclave-hq/wallet-sdk/react'
 import { WalletType, ChainType, ConnectedWallet } from '@enclave-hq/wallet-sdk'
 import { WalletDetector, getEVMWallets, getTronWallets } from '@enclave-hq/wallet-sdk'
 import './App.css'
@@ -10,9 +10,11 @@ function App() {
   const { connect, connectAdditional, isConnecting, error: connectError } = useConnect()
   const { disconnect, isDisconnecting } = useDisconnect()
   const { signMessage, isSigning, error: signError } = useSignMessage()
+  const { signTransaction, isSigning: isSigningTx } = useSignTransaction()
 
   const [messageToSign, setMessageToSign] = useState('Hello from Enclave Wallet SDK!')
   const [signature, setSignature] = useState<string>('')
+  const [txSignature, setTxSignature] = useState<string>('')
   const [availableWallets, setAvailableWallets] = useState<any[]>([])
   const [detectionDone, setDetectionDone] = useState(false)
   const [eventLogs, setEventLogs] = useState<Array<{ time: string; type: string; message: string }>>([])
@@ -84,6 +86,29 @@ function App() {
       setSignature(sig)
     } catch (error) {
       console.error('Sign error:', error)
+    }
+  }
+
+  // 签名交易
+  const handleSignTransaction = async () => {
+    try {
+      // 根据当前钱包类型创建不同的测试交易
+      if (account?.chainType === ChainType.EVM) {
+        // EVM 交易示例
+        const tx = {
+          to: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0', // 测试地址
+          value: '0x0', // 0 ETH
+          data: '0x', // 空数据
+        }
+        const sig = await signTransaction(tx)
+        setTxSignature(sig)
+      } else if (account?.chainType === ChainType.TRON) {
+        // Tron 交易示例 - 需要一个完整的交易对象
+        // 注意：这里需要一个真实的 Tron 交易对象
+        alert('Tron 交易签名需要先创建一个完整的交易对象。请使用 TronWeb 的 API 创建交易，然后调用 signTransaction。')
+      }
+    } catch (error) {
+      console.error('Sign transaction error:', error)
     }
   }
 
@@ -289,10 +314,10 @@ function App() {
           </section>
         )}
 
-        {/* 签名测试 */}
+        {/* 消息签名测试 */}
         {isConnected && (
           <section className="section">
-            <h2>✍️ Sign Message</h2>
+            <h2>✍️ Sign Message (消息签名)</h2>
             <div className="sign-container">
               <textarea
                 value={messageToSign}
@@ -316,6 +341,38 @@ function App() {
               )}
               {signError && (
                 <div className="error-message">Error: {signError.message}</div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* 交易签名测试 */}
+        {isConnected && (
+          <section className="section">
+            <h2>🔏 Sign Transaction (交易签名)</h2>
+            <div className="sign-container">
+              <div className="info-box">
+                <p>
+                  <strong>当前钱包类型:</strong> {account?.chainType?.toUpperCase()}
+                </p>
+                <p className="small">
+                  {account?.chainType === ChainType.EVM
+                    ? '✅ EVM 钱包 - 将签名一个测试交易'
+                    : '⚠️ Tron 钱包 - 需要完整的交易对象'}
+                </p>
+              </div>
+              <button
+                onClick={handleSignTransaction}
+                disabled={isSigningTx}
+                className="btn btn-primary"
+              >
+                {isSigningTx ? 'Signing...' : 'Sign Transaction'}
+              </button>
+              {txSignature && (
+                <div className="signature-result">
+                  <strong>Transaction Signature:</strong>
+                  <code className="signature-value">{txSignature}</code>
+                </div>
               )}
             </div>
           </section>

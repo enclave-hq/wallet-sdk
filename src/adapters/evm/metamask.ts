@@ -147,6 +147,47 @@ export class MetaMaskAdapter extends BrowserWalletAdapter {
   }
 
   /**
+   * 签名交易
+   * 
+   * Note: This signs a raw transaction without sending it.
+   * The transaction can be broadcast later using the returned signature.
+   */
+  async signTransaction(transaction: any): Promise<string> {
+    this.ensureConnected()
+
+    try {
+      const provider = this.getBrowserProvider()
+      
+      // Prepare transaction object with proper formatting
+      const tx = {
+        from: this.currentAccount!.nativeAddress,
+        to: transaction.to,
+        value: transaction.value ? `0x${BigInt(transaction.value).toString(16)}` : undefined,
+        data: transaction.data || '0x',
+        gas: transaction.gas ? `0x${BigInt(transaction.gas).toString(16)}` : undefined,
+        gasPrice: transaction.gasPrice ? `0x${BigInt(transaction.gasPrice).toString(16)}` : undefined,
+        maxFeePerGas: transaction.maxFeePerGas ? `0x${BigInt(transaction.maxFeePerGas).toString(16)}` : undefined,
+        maxPriorityFeePerGas: transaction.maxPriorityFeePerGas ? `0x${BigInt(transaction.maxPriorityFeePerGas).toString(16)}` : undefined,
+        nonce: transaction.nonce !== undefined ? `0x${transaction.nonce.toString(16)}` : undefined,
+        chainId: transaction.chainId || this.currentAccount!.chainId,
+      }
+
+      // Sign the transaction
+      const signature = await provider.request({
+        method: 'eth_signTransaction',
+        params: [tx],
+      })
+
+      return signature
+    } catch (error: any) {
+      if (error.code === 4001) {
+        throw new SignatureRejectedError('Transaction signature was rejected by user')
+      }
+      throw error
+    }
+  }
+
+  /**
    * 切换链
    */
   async switchChain(chainId: number): Promise<void> {

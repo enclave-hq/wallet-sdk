@@ -24,6 +24,9 @@ export type {
   WalletHistoryRecord,
   StorageData,
   WalletAvailability,
+  EVMTransaction,
+  TronTransaction,
+  Transaction,
 } from './core/types'
 
 export {
