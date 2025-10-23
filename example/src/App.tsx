@@ -23,7 +23,7 @@ function App() {
   // Contract interaction states
   const [usdtBalance, setUsdtBalance] = useState<string>('')
   const [isLoadingBalance, setIsLoadingBalance] = useState(false)
-  const [transferTo, setTransferTo] = useState('0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0')
+  const [transferTo, setTransferTo] = useState('')
   const [transferAmount, setTransferAmount] = useState('1')
   const [isTransferring, setIsTransferring] = useState(false)
   const [transferTxHash, setTransferTxHash] = useState<string>('')
@@ -33,6 +33,59 @@ function App() {
   const addLog = (type: string, message: string) => {
     const time = new Date().toLocaleTimeString()
     setEventLogs(prev => [{ time, type, message }, ...prev].slice(0, 10)) // 只保留最近 10 条
+  }
+
+  // 获取区块浏览器链接
+  const getBlockExplorerUrl = (txHash: string, currentChainId: number, currentChainType: string): { url: string; name: string } => {
+    if (currentChainType === ChainType.TRON) {
+      // Tron 链
+      if (currentChainId === 195) {
+        return { url: `https://tronscan.org/#/transaction/${txHash}`, name: 'Tronscan' }
+      } else if (currentChainId === 2494104990) {
+        return { url: `https://nile.tronscan.org/#/transaction/${txHash}`, name: 'Tronscan (Nile)' }
+      }
+      return { url: `https://tronscan.org/#/transaction/${txHash}`, name: 'Tronscan' }
+    }
+
+    // EVM 链
+    switch (currentChainId) {
+      case 1:
+        return { url: `https://etherscan.io/tx/${txHash}`, name: 'Etherscan' }
+      case 56:
+        return { url: `https://bscscan.com/tx/${txHash}`, name: 'BscScan' }
+      case 97:
+        return { url: `https://testnet.bscscan.com/tx/${txHash}`, name: 'BscScan Testnet' }
+      case 137:
+        return { url: `https://polygonscan.com/tx/${txHash}`, name: 'PolygonScan' }
+      case 80001:
+        return { url: `https://mumbai.polygonscan.com/tx/${txHash}`, name: 'PolygonScan Mumbai' }
+      case 42161:
+        return { url: `https://arbiscan.io/tx/${txHash}`, name: 'Arbiscan' }
+      case 421614:
+        return { url: `https://sepolia.arbiscan.io/tx/${txHash}`, name: 'Arbiscan Sepolia' }
+      case 10:
+        return { url: `https://optimistic.etherscan.io/tx/${txHash}`, name: 'Optimism Explorer' }
+      case 11155420:
+        return { url: `https://sepolia-optimism.etherscan.io/tx/${txHash}`, name: 'Optimism Sepolia' }
+      case 8453:
+        return { url: `https://basescan.org/tx/${txHash}`, name: 'BaseScan' }
+      case 84532:
+        return { url: `https://sepolia.basescan.org/tx/${txHash}`, name: 'BaseScan Sepolia' }
+      case 11155111:
+        return { url: `https://sepolia.etherscan.io/tx/${txHash}`, name: 'Etherscan Sepolia' }
+      case 5:
+        return { url: `https://goerli.etherscan.io/tx/${txHash}`, name: 'Etherscan Goerli' }
+      case 43114:
+        return { url: `https://snowtrace.io/tx/${txHash}`, name: 'SnowTrace' }
+      case 43113:
+        return { url: `https://testnet.snowtrace.io/tx/${txHash}`, name: 'SnowTrace Testnet' }
+      case 250:
+        return { url: `https://ftmscan.com/tx/${txHash}`, name: 'FTMScan' }
+      case 4002:
+        return { url: `https://testnet.ftmscan.com/tx/${txHash}`, name: 'FTMScan Testnet' }
+      default:
+        return { url: `https://etherscan.io/tx/${txHash}`, name: 'Block Explorer' }
+    }
   }
 
   // 检测钱包
@@ -188,7 +241,7 @@ function App() {
 
   // USDT 转账
   const handleUSDTTransfer = async () => {
-    if (!chainId || !transferTo || !transferAmount) return
+    if (!chainId || !transferTo || !transferAmount || !account?.chainType) return
     
     setIsTransferring(true)
     setContractError('')
@@ -200,6 +253,24 @@ function App() {
         setContractError(`Chain ${chainId} does not have USDT configured`)
         setIsTransferring(false)
         return
+      }
+
+      // 验证地址格式
+      const trimmedAddress = transferTo.trim()
+      if (account.chainType === ChainType.EVM) {
+        // EVM 地址验证
+        if (!trimmedAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
+          setContractError('Invalid EVM address format. Expected: 0x followed by 40 hex characters')
+          setIsTransferring(false)
+          return
+        }
+      } else if (account.chainType === ChainType.TRON) {
+        // Tron 地址验证
+        if (!trimmedAddress.match(/^T[a-zA-Z0-9]{33}$/)) {
+          setContractError('Invalid Tron address format. Expected: T followed by 33 characters')
+          setIsTransferring(false)
+          return
+        }
       }
 
       // Read decimals first
@@ -219,7 +290,7 @@ function App() {
         usdtAddress,
         ERC20_ABI,
         'transfer',
-        [transferTo, amount.toString()]
+        [trimmedAddress, amount.toString()]
       )
 
       setTransferTxHash(txHash)
@@ -533,9 +604,18 @@ function App() {
                     type="text"
                     value={transferTo}
                     onChange={(e) => setTransferTo(e.target.value)}
-                    placeholder={account?.chainType === ChainType.TRON ? 'T...' : '0x...'}
+                    placeholder={
+                      account?.chainType === ChainType.TRON 
+                        ? 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t' 
+                        : '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0'
+                    }
                     className="input"
                   />
+                  <span className="input-hint">
+                    {account?.chainType === ChainType.TRON 
+                      ? '⚠️ Tron 地址格式: T + 33字符 (Base58)' 
+                      : '⚠️ EVM 地址格式: 0x + 40 hex 字符'}
+                  </span>
                 </div>
                 <div className="form-group">
                   <label>转账数量 (Amount):</label>
@@ -559,29 +639,23 @@ function App() {
                 </button>
               </div>
 
-              {transferTxHash && (
+              {transferTxHash && chainId && account?.chainType && (
                 <div className="signature-result">
                   <strong>✅ Transaction Hash:</strong>
                   <code className="signature-value">{transferTxHash}</code>
-                  {account?.chainType === ChainType.TRON ? (
-                    <a
-                      href={`https://tronscan.org/#/transaction/${transferTxHash}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="link-external"
-                    >
-                      View on Tronscan →
-                    </a>
-                  ) : (
-                    <a
-                      href={`https://etherscan.io/tx/${transferTxHash}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="link-external"
-                    >
-                      View on Block Explorer →
-                    </a>
-                  )}
+                  {(() => {
+                    const explorer = getBlockExplorerUrl(transferTxHash, chainId, account.chainType)
+                    return (
+                      <a
+                        href={explorer.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="link-external"
+                      >
+                        View on {explorer.name} →
+                      </a>
+                    )
+                  })()}
                 </div>
               )}
             </div>

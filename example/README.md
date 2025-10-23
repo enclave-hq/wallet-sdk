@@ -1,173 +1,187 @@
 # Wallet SDK Example Application
 
-完整的 Wallet SDK 演示应用，展示所有核心功能和最佳实践。
+Complete demonstration application showcasing all core features and best practices of the Wallet SDK.
 
-## 🎯 功能展示
+## 🎯 Features
 
-### 1. 钱包连接 🔌
-- ✅ **自动检测** - 检测已安装的钱包（MetaMask, TronLink）
-- ✅ **多链支持** - EVM 和 Tron 链
-- ✅ **多钱包管理** - 同时连接多个钱包
-- ✅ **主钱包切换** - 动态切换活跃钱包
+### 1. Wallet Connection 🔌
+- ✅ **Auto-detection** - Detect installed wallets (MetaMask, TronLink)
+- ✅ **Multi-chain Support** - EVM and Tron chains
+- ✅ **Multi-wallet Management** - Connect multiple wallets simultaneously
+- ✅ **Primary Wallet Switching** - Dynamically switch active wallet
 
-### 2. 签名功能 ✍️
-- ✅ **消息签名** (`signMessage`) - 用于身份验证
-- ✅ **交易签名** (`signTransaction`) - 离线交易签名
-- ✅ **TypedData 签名** - EIP-712 结构化数据
+### 2. Signing Features ✍️
+- ✅ **Message Signing** (`signMessage`) - For authentication
+- ✅ **Transaction Signing** (`signTransaction`) - Offline transaction signing
+- ✅ **TypedData Signing** - EIP-712 structured data
 
-### 3. 合约交互 📜
-- ✅ **Read Contract** - 读取链上数据（免费）
-  - 查询 USDT 余额
-  - 读取代币精度
-- ✅ **Write Contract** - 写入链上数据（需要 Gas）
-  - USDT 转账
-  - 自动余额刷新
-  - 交易哈希显示
+### 3. Contract Interaction 📜
+- ✅ **Read Contract** - Read on-chain data (free)
+  - Query USDT balance
+  - Read token decimals
+- ✅ **Write Contract** - Write on-chain data (requires Gas)
+  - USDT transfer
+  - Auto balance refresh
+  - Transaction hash display
+  - Multi-chain explorer support
 
-### 4. 链管理 🔄
-- ✅ **链切换** - 切换 EVM 网络（Ethereum, BSC, Polygon）
-- ✅ **自动添加链** - 不存在的链自动添加到钱包
+### 4. Chain Management 🔄
+- ✅ **Chain Switching** - Switch EVM networks (Ethereum, BSC, Polygon)
+- ✅ **Auto-add Chain** - Automatically add chains to wallet if not present
 
-### 5. 事件监听 📡
-- ✅ **账户切换监听** - 实时检测账户变化
-- ✅ **链切换监听** - 实时检测网络变化
-- ✅ **主钱包切换监听** - 多钱包切换事件
-- ✅ **断开连接监听** - 钱包断开事件
+### 5. Event Listeners 📡
+- ✅ **Account Change Listener** - Real-time account change detection
+- ✅ **Chain Change Listener** - Real-time network change detection
+- ✅ **Primary Wallet Switch Listener** - Multi-wallet switch events
+- ✅ **Disconnect Listener** - Wallet disconnect events
 
 ---
 
-## 🚀 快速开始
+## 🚀 Quick Start
 
-### 安装依赖
+### Install Dependencies
 
 ```bash
 cd example
 npm install
 ```
 
-### 启动开发服务器
+### Start Development Server
 
 ```bash
 npm run dev
 ```
 
-应用将在 `http://localhost:5173` 启动
+App will start at `http://localhost:5173`
 
-### 构建生产版本
+### Build for Production
 
 ```bash
 npm run build
 ```
 
-构建后的文件在 `dist/` 目录
+Built files will be in the `dist/` directory
 
 ---
 
-## 📁 项目结构
+## 📁 Project Structure
 
 ```
 example/
 ├── src/
-│   ├── App.tsx              # 主应用组件
-│   ├── App.css              # 应用样式
-│   ├── main.tsx            # React 入口
-│   ├── index.css           # 全局样式
+│   ├── App.tsx              # Main application component
+│   ├── App.css              # Application styles
+│   ├── main.tsx            # React entry point
+│   ├── index.css           # Global styles
 │   └── abis/
-│       └── erc20.ts        # ERC20 合约 ABI 和地址
-├── public/                  # 静态资源
-├── index.html              # HTML 模板
-├── package.json            # 项目配置
-├── vite.config.ts          # Vite 配置
-├── tsconfig.json           # TypeScript 配置
-├── README.md               # 本文档
-└── CONTRACT_INTERACTION_GUIDE.md  # 合约交互详细指南
+│       └── erc20.ts        # ERC20 contract ABI and addresses
+├── public/                  # Static assets
+├── index.html              # HTML template
+├── package.json            # Project configuration
+├── vite.config.ts          # Vite configuration
+├── tsconfig.json           # TypeScript configuration
+└── README.md               # This document
 ```
 
 ---
 
-## 🎮 使用指南
+## 🎮 Usage Guide
 
-### Step 1: 检测钱包
+### Step 1: Detect Wallets
 
-点击 "Detect Wallets" 按钮，应用会自动检测：
+Click "Detect Wallets" button, the app will automatically detect:
 - ✅ MetaMask (EVM)
 - ✅ TronLink (Tron)
-- ✅ 其他 Web3 钱包
+- ✅ Other Web3 wallets
 
-### Step 2: 连接钱包
+### Step 2: Connect Wallet
 
-选择一个可用的钱包并点击连接：
-- 🟢 绿色勾号 ✅ - 钱包已安装且可用
-- 🔴 红色叉号 ❌ - 钱包未安装
+Select an available wallet and click to connect:
+- 🟢 Green checkmark ✅ - Wallet installed and available
+- 🔴 Red cross ❌ - Wallet not installed
 
-### Step 3: 查看钱包状态
+### Step 3: View Wallet Status
 
-连接成功后，可以看到：
-- 📍 当前地址
-- 🔗 链 ID
-- 🌐 链类型 (EVM/TRON)
+After successful connection, you can see:
+- 📍 Current address
+- 🔗 Chain ID
+- 🌐 Chain type (EVM/TRON)
 - 🔑 Universal Address
 
-### Step 4: 测试签名功能
+### Step 4: Test Signing Features
 
-#### 消息签名
-1. 输入要签名的消息
-2. 点击 "Sign Message"
-3. 在钱包中确认
-4. 查看签名结果
+#### Message Signing
+1. Enter message to sign
+2. Click "Sign Message"
+3. Confirm in wallet
+4. View signature result
 
-#### 交易签名
-1. 点击 "Sign Transaction"
-2. 在钱包中确认
-3. 查看签名结果
+#### Transaction Signing
+1. Click "Sign Transaction"
+2. Confirm in wallet
+3. View signature result
 
-### Step 5: 测试合约交互 (EVM Only)
+### Step 5: Test Contract Interaction
 
-#### 读取 USDT 余额
-1. 确保连接到支持的链（Ethereum, BSC, Polygon）
-2. 点击 "Read USDT Balance"
-3. 查看余额（自动格式化）
+#### Read USDT Balance
+1. Ensure connected to supported chain (Ethereum, BSC, Polygon, Tron)
+2. Click "Read USDT Balance"
+3. View balance (auto-formatted)
 
-#### USDT 转账
-1. 输入收款地址 (0x...)
-2. 输入转账数量
-3. 点击 "Transfer USDT"
-4. 在钱包中确认交易
-5. 查看交易哈希
-6. 点击链接在 Etherscan 查看
+#### USDT Transfer
+1. Enter recipient address
+   - **EVM**: `0x...` format (42 characters)
+   - **Tron**: `T...` format (34 characters)
+2. Enter transfer amount
+3. Click "Transfer USDT"
+4. Confirm transaction in wallet
+5. View transaction hash
+6. Click link to view on block explorer
 
-### Step 6: 切换链 (EVM Only)
+**Supported Block Explorers:**
+- Ethereum: Etherscan
+- BSC: BscScan
+- Polygon: PolygonScan
+- Arbitrum: Arbiscan
+- Optimism: Optimism Explorer
+- Base: BaseScan
+- Avalanche: SnowTrace
+- Fantom: FTMScan
+- Tron: Tronscan
 
-点击预设的链按钮：
+### Step 6: Switch Chain (EVM Only)
+
+Click preset chain buttons:
 - Ethereum Mainnet (1)
 - BSC Mainnet (56)
 - Polygon Mainnet (137)
 - Sepolia Testnet (11155111)
 
-### Step 7: 连接额外钱包
+### Step 7: Connect Additional Wallet
 
-如果想同时使用多个钱包：
-1. 点击 "Connect Additional Wallet"
-2. 选择另一个钱包类型
-3. 使用 "Set as Primary" 切换主钱包
+To use multiple wallets simultaneously:
+1. Click "Connect Additional Wallet"
+2. Select another wallet type
+3. Use "Set as Primary" to switch primary wallet
 
-### Step 8: 查看事件日志
+### Step 8: View Event Log
 
-所有钱包事件会实时显示在事件日志中：
-- 📗 账户切换
-- 📘 链切换
-- 📙 主钱包切换
-- 📗 合约读取
-- 📙 合约交易
-- 📕 断开连接
+All wallet events are displayed in real-time in the event log:
+- 📗 Account switched
+- 📘 Chain switched
+- 📙 Primary wallet switched
+- 📗 Contract read
+- 📙 Contract transaction
+- 📕 Disconnected
 
 ---
 
-## 🔧 支持的链
+## 🔧 Supported Chains
 
 ### Ethereum
 - **Mainnet**: Chain ID 1
 - **Sepolia Testnet**: Chain ID 11155111
+- **Goerli Testnet**: Chain ID 5
 
 ### BSC (Binance Smart Chain)
 - **Mainnet**: Chain ID 56
@@ -175,94 +189,133 @@ example/
 
 ### Polygon
 - **Mainnet**: Chain ID 137
+- **Mumbai Testnet**: Chain ID 80001
 
 ### Arbitrum
 - **Arbitrum One**: Chain ID 42161
+- **Sepolia Testnet**: Chain ID 421614
+
+### Optimism
+- **Mainnet**: Chain ID 10
+- **Sepolia Testnet**: Chain ID 11155420
+
+### Base
+- **Mainnet**: Chain ID 8453
+- **Sepolia Testnet**: Chain ID 84532
+
+### Avalanche
+- **C-Chain**: Chain ID 43114
+- **Fuji Testnet**: Chain ID 43113
+
+### Fantom
+- **Opera**: Chain ID 250
+- **Testnet**: Chain ID 4002
+
+### Tron
+- **Mainnet**: Chain ID 195
+- **Nile Testnet**: Chain ID 2494104990
 
 ---
 
-## 💡 技术栈
+## 💡 Tech Stack
 
-- **React 18** - UI 框架
-- **TypeScript** - 类型安全
-- **Vite** - 构建工具
-- **@enclave-hq/wallet-sdk** - 钱包管理
-- **Viem** - Ethereum 交互（底层）
-- **TronWeb** - Tron 交互（底层）
-
----
-
-## 📚 相关文档
-
-- [Wallet SDK 主文档](../README.md)
-- [快速开始指南](../QUICKSTART.md)
-- [签名方法说明](../SIGNING_METHODS.md)
-- [合约交互指南](./CONTRACT_INTERACTION_GUIDE.md)
-- [MetaMask 限制说明](../METAMASK_LIMITATIONS.md)
+- **React 18** - UI framework
+- **TypeScript** - Type safety
+- **Vite** - Build tool
+- **@enclave-hq/wallet-sdk** - Wallet management
+- **@enclave-hq/chain-utils** - Chain utilities and SLIP-44 support
+- **Viem** - Ethereum interaction (underlying)
+- **TronWeb** - Tron interaction (underlying)
 
 ---
 
-## ⚠️ 重要提示
+## 📚 Related Documentation
 
-### MetaMask 账户切换
-- MetaMask **不会**检测切换到未连接的账户
-- 如需使用新账户，请先断开连接，然后重新连接
-- 详见 [METAMASK_LIMITATIONS.md](../METAMASK_LIMITATIONS.md)
-
-### Gas 费用
-- **readContract**: 免费，无需 Gas
-- **writeContract**: 需要原生代币支付 Gas
-  - 转账前确保钱包有足够的 ETH/BNB/MATIC
-
-### 测试建议
-- 使用**测试网**进行测试 (Sepolia, BSC Testnet)
-- 从**水龙头**获取测试代币
-- 先进行**小额测试**
+- [Wallet SDK Main Documentation](../README.md)
+- [Quick Start Guide](../QUICKSTART.md)
+- [Signing Methods](../SIGNING_METHODS.md)
+- [MetaMask Limitations](../METAMASK_LIMITATIONS.md)
+- [Tron Address Validation Fix](../TRON_ADDRESS_VALIDATION_FIX.md)
 
 ---
 
-## 🐛 故障排除
+## ⚠️ Important Notes
 
-### 钱包未检测到
-**解决方案**:
-1. 确保已安装钱包扩展
-2. 刷新页面
-3. 点击 "Re-detect Wallets"
+### MetaMask Account Switching
+- MetaMask **does not** detect switches to unconnected accounts
+- To use a new account, disconnect first, then reconnect
+- See [METAMASK_LIMITATIONS.md](../METAMASK_LIMITATIONS.md) for details
 
-### 连接失败
-**解决方案**:
-1. 检查钱包是否已解锁
-2. 检查是否在钱包中允许了连接
-3. 查看浏览器控制台的错误信息
+### Gas Fees
+- **readContract**: Free, no Gas required
+- **writeContract**: Requires native tokens to pay Gas
+  - Ensure wallet has sufficient ETH/BNB/MATIC/TRX before transfer
 
-### 合约调用失败
-**解决方案**:
-1. 确保连接到正确的链
-2. 检查合约地址是否正确
-3. 确保钱包有足够的 Gas
-4. 查看事件日志的错误信息
+### Address Format Validation
+- **EVM**: `0x` + 40 hex characters (e.g., `0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0`)
+- **Tron**: `T` + 33 Base58 characters (e.g., `TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t`)
+- App automatically validates address format based on chain type
+
+### Testing Recommendations
+- Use **testnets** for testing (Sepolia, BSC Testnet, Nile)
+- Get test tokens from **faucets**
+- Start with **small amounts**
 
 ---
 
-## 🎨 自定义
+## 🐛 Troubleshooting
 
-### 添加新的代币
+### Wallet Not Detected
+**Solution**:
+1. Ensure wallet extension is installed
+2. Refresh the page
+3. Click "Re-detect Wallets"
+4. For TronLink, wait a few seconds (async injection)
 
-编辑 `src/abis/erc20.ts`:
+### Connection Failed
+**Solution**:
+1. Check if wallet is unlocked
+2. Check if connection was allowed in wallet
+3. Check browser console for error messages
+
+### Contract Call Failed
+**Solution**:
+1. Ensure connected to correct chain
+2. Check if contract address is correct
+3. Ensure wallet has sufficient Gas
+4. Check event log for error messages
+5. Verify address format matches chain type
+
+### Tron Transfer Error
+**Common Issue**: `Cannot read properties of undefined (reading 'toLowerCase')`
+
+**Solution**:
+1. Ensure you're entering a valid Tron address (starts with `T`)
+2. Refresh browser with `Cmd/Ctrl + Shift + R`
+3. Check console logs for detailed error information
+4. See [TRON_ADDRESS_VALIDATION_FIX.md](../TRON_ADDRESS_VALIDATION_FIX.md) for details
+
+---
+
+## 🎨 Customization
+
+### Add New Tokens
+
+Edit `src/abis/erc20.ts`:
 
 ```typescript
 export const TOKEN_ADDRESSES = {
   1: {
     USDT: '0x...',
     USDC: '0x...',
-    YOUR_TOKEN: '0x...',  // 添加新代币
+    YOUR_TOKEN: '0x...',  // Add new token
   }
 }
 ```
 
-### 添加新的链
+### Add New Chains
 
-在 `src/App.tsx` 的链切换按钮中添加:
+Add chain switch button in `src/App.tsx`:
 
 ```tsx
 <button onClick={() => handleSwitchChain(YOUR_CHAIN_ID)}>
@@ -270,20 +323,107 @@ export const TOKEN_ADDRESSES = {
 </button>
 ```
 
----
+### Add Block Explorers
 
-## 📝 许可证
+Update `getBlockExplorerUrl()` function in `src/App.tsx`:
 
-MIT License - 详见 [LICENSE](../LICENSE)
-
----
-
-## 🤝 贡献
-
-欢迎提交 Issue 和 Pull Request！
+```typescript
+case YOUR_CHAIN_ID:
+  return { url: `https://explorer.com/tx/${txHash}`, name: 'Explorer Name' }
+```
 
 ---
 
-**构建时间**: 2025-01-23  
-**SDK 版本**: @enclave-hq/wallet-sdk v1.0.0
+## 🔍 Code Examples
+
+### Basic Connection
+
+```typescript
+import { useConnect, useAccount } from '@enclave-hq/wallet-sdk/react'
+
+function App() {
+  const { connect } = useConnect()
+  const { account, isConnected } = useAccount()
+  
+  const handleConnect = async () => {
+    await connect(WalletType.METAMASK)
+  }
+  
+  return (
+    <div>
+      {isConnected ? (
+        <p>Connected: {account.nativeAddress}</p>
+      ) : (
+        <button onClick={handleConnect}>Connect</button>
+      )}
+    </div>
+  )
+}
+```
+
+### Sign Message
+
+```typescript
+import { useSignMessage } from '@enclave-hq/wallet-sdk/react'
+
+function SignDemo() {
+  const { signMessage } = useSignMessage()
+  
+  const handleSign = async () => {
+    const signature = await signMessage('Hello Enclave!')
+    console.log('Signature:', signature)
+  }
+  
+  return <button onClick={handleSign}>Sign Message</button>
+}
+```
+
+### Contract Interaction
+
+```typescript
+import { useWallet } from '@enclave-hq/wallet-sdk/react'
+
+function ContractDemo() {
+  const { walletManager } = useWallet()
+  
+  // Read contract
+  const readBalance = async () => {
+    const balance = await walletManager.readContract(
+      contractAddress,
+      ABI,
+      'balanceOf',
+      [userAddress]
+    )
+    return balance
+  }
+  
+  // Write contract
+  const transfer = async () => {
+    const txHash = await walletManager.writeContract(
+      contractAddress,
+      ABI,
+      'transfer',
+      [recipientAddress, amount]
+    )
+    return txHash
+  }
+}
+```
+
+---
+
+## 📝 License
+
+MIT License - See [LICENSE](../LICENSE)
+
+---
+
+## 🤝 Contributing
+
+Issues and Pull Requests are welcome!
+
+---
+
+**Build Date**: 2025-01-23  
+**SDK Version**: @enclave-hq/wallet-sdk v1.0.0
 

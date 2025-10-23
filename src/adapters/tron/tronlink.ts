@@ -185,23 +185,86 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
     try {
       const tronWeb = this.getTronWeb()
       
-      // 获取合约实例
-      const contract = await tronWeb.contract(params.abi, params.address)
+      console.log('[TronLink] writeContract params:', {
+        address: params.address,
+        functionName: params.functionName,
+        args: params.args,
+        value: params.value,
+        gas: params.gas,
+      })
       
-      // 准备交易选项
-      const options: any = {}
-      if (params.value) {
-        options.callValue = params.value
-      }
-      if (params.gas) {
-        options.feeLimit = params.gas
+      // 验证参数
+      if (!params.args || params.args.length === 0) {
+        throw new Error('Contract function arguments are required')
       }
       
-      // 调用合约方法（写入）
-      const transaction = await contract[params.functionName](...(params.args || [])).send(options)
+      // 检查参数是否包含 undefined
+      const hasUndefined = params.args.some(arg => arg === undefined || arg === null)
+      if (hasUndefined) {
+        console.error('[TronLink] Invalid args detected:', params.args)
+        throw new Error(`Invalid contract arguments: some arguments are undefined or null`)
+      }
+      
+      // 使用 TronWeb 的 transactionBuilder.triggerSmartContract API
+      // 这是更底层、更可靠的 API
+      
+      // 构建函数签名
+      const functionAbi = params.abi.find((item: any) => 
+        item.name === params.functionName && item.type === 'function'
+      )
+      
+      if (!functionAbi) {
+        throw new Error(`Function ${params.functionName} not found in ABI`)
+      }
+      
+      console.log('[TronLink] Function ABI:', functionAbi)
+      console.log('[TronLink] Calling with args:', params.args)
+      
+      // 准备交易参数
+      const options = {
+        feeLimit: params.gas || 100_000_000, // 默认 100 TRX 的能量限制
+        callValue: params.value || 0, // 发送的 TRX 数量（单位：SUN）
+      }
+      
+      // 构建参数数组
+      const parameter = functionAbi.inputs.map((input: any, index: number) => ({
+        type: input.type,
+        value: params.args![index]
+      }))
+      
+      console.log('[TronLink] Transaction options:', options)
+      console.log('[TronLink] Parameters:', parameter)
+      
+      // 使用 triggerSmartContract 触发合约
+      const transaction = await tronWeb.transactionBuilder.triggerSmartContract(
+        params.address,
+        params.functionName + '(' + functionAbi.inputs.map((i: any) => i.type).join(',') + ')',
+        options,
+        parameter,
+        this.currentAccount!.nativeAddress
+      )
+      
+      console.log('[TronLink] Transaction built:', transaction)
+      
+      // 签名并广播交易
+      if (!transaction || !transaction.transaction) {
+        throw new Error('Failed to build transaction')
+      }
+      
+      const signedTx = await tronWeb.trx.sign(transaction.transaction)
+      const broadcast = await tronWeb.trx.sendRawTransaction(signedTx)
+      
+      console.log('[TronLink] Broadcast result:', broadcast)
+      
+      if (!broadcast.result) {
+        throw new Error(broadcast.message || 'Transaction broadcast failed')
+      }
+      
+      const txHash = broadcast.txid || broadcast.transaction?.txID
+      console.log('[TronLink] Transaction hash:', txHash)
       
       // 返回交易哈希
-      return transaction || ''
+      return txHash || ''
     } catch (error: any) {
       console.error('Write contract error:', error)
       
