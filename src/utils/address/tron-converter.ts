@@ -58,3 +58,4 @@ export function shortenTronAddress(address: string, chars = 4): string {
  * 这里只提供基础验证功能
  */
 
+

@@ -63,3 +63,4 @@ export function isValidTransactionHash(txHash: string, chainType: ChainType): bo
   }
 }
 
+
