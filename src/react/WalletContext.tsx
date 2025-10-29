@@ -7,16 +7,17 @@ import { WalletManager } from '../core/wallet-manager'
 import { Account, WalletType, ConnectedWallet, ChainType } from '../core/types'
 
 /**
- * Wallet Context 类型
+ * Wallet Context Type
  */
 export interface WalletContextValue {
-  // 状态
+  // State
   walletManager: WalletManager
   account: Account | null
   isConnected: boolean
   connectedWallets: ConnectedWallet[]
+  isRestoring: boolean  // Whether connection is being restored
 
-  // 方法
+  // Methods
   connect: (type: WalletType, chainId?: number) => Promise<Account>
   connectAdditional: (type: WalletType, chainId?: number) => Promise<Account>
   disconnect: () => Promise<void>
@@ -45,13 +46,14 @@ export function WalletProvider({ children, walletManager: externalWalletManager 
   const [walletManager] = useState(() => externalWalletManager || new WalletManager())
   const [account, setAccount] = useState<Account | null>(null)
   const [connectedWallets, setConnectedWallets] = useState<ConnectedWallet[]>([])
+  const [isRestoring, setIsRestoring] = useState(true)
 
-  // 更新连接的钱包列表
+  // Update connected wallets list
   const updateConnectedWallets = useCallback(() => {
     setConnectedWallets(walletManager.getConnectedWallets())
   }, [walletManager])
 
-  // 连接钱包
+  // Connect wallet
   const connect = useCallback(async (type: WalletType, chainId?: number) => {
     const account = await walletManager.connect(type, chainId)
     setAccount(account)
@@ -59,21 +61,21 @@ export function WalletProvider({ children, walletManager: externalWalletManager 
     return account
   }, [walletManager, updateConnectedWallets])
 
-  // 连接额外的钱包
+  // Connect additional wallet
   const connectAdditional = useCallback(async (type: WalletType, chainId?: number) => {
     const account = await walletManager.connectAdditional(type, chainId)
     updateConnectedWallets()
     return account
   }, [walletManager, updateConnectedWallets])
 
-  // 断开连接
+  // Disconnect wallet
   const disconnect = useCallback(async () => {
     await walletManager.disconnect()
     setAccount(null)
     updateConnectedWallets()
   }, [walletManager, updateConnectedWallets])
 
-  // 切换主钱包
+  // Switch primary wallet
   const switchPrimaryWallet = useCallback(async (chainType: ChainType) => {
     const account = await walletManager.switchPrimaryWallet(chainType)
     setAccount(account)
@@ -81,17 +83,37 @@ export function WalletProvider({ children, walletManager: externalWalletManager 
     return account
   }, [walletManager, updateConnectedWallets])
 
-  // 签名消息
+  // Sign message
   const signMessage = useCallback(async (message: string) => {
     return walletManager.signMessage(message)
   }, [walletManager])
 
-  // 签名交易
+  // Sign transaction
   const signTransaction = useCallback(async (transaction: any) => {
     return walletManager.signTransaction(transaction)
   }, [walletManager])
 
-  // 监听事件
+  // Auto-restore connection (only on mount)
+  useEffect(() => {
+    const restoreConnection = async () => {
+      try {
+        // Try to restore connection from storage
+        const restoredAccount = await walletManager.restoreFromStorage()
+        if (restoredAccount) {
+          setAccount(restoredAccount)
+          updateConnectedWallets()
+        }
+      } catch (error) {
+        console.debug('Failed to restore wallet connection:', error)
+      } finally {
+        setIsRestoring(false)
+      }
+    }
+
+    restoreConnection()
+  }, [walletManager, updateConnectedWallets])
+
+  // Listen to events
   useEffect(() => {
     const handleAccountChanged = (newAccount: Account | null) => {
       setAccount(newAccount)
@@ -118,9 +140,14 @@ export function WalletProvider({ children, walletManager: externalWalletManager 
     walletManager.on('disconnected', handleDisconnected)
     walletManager.on('primaryWalletSwitched', handlePrimaryWalletSwitched)
 
-    // 初始化账户
-    setAccount(walletManager.getPrimaryAccount())
-    updateConnectedWallets()
+    // Initialize account (if already connected)
+    if (!isRestoring) {
+      const primaryAccount = walletManager.getPrimaryAccount()
+      if (primaryAccount) {
+        setAccount(primaryAccount)
+        updateConnectedWallets()
+      }
+    }
 
     return () => {
       walletManager.off('accountChanged', handleAccountChanged)
@@ -128,13 +155,14 @@ export function WalletProvider({ children, walletManager: externalWalletManager 
       walletManager.off('disconnected', handleDisconnected)
       walletManager.off('primaryWalletSwitched', handlePrimaryWalletSwitched)
     }
-  }, [walletManager, updateConnectedWallets])
+  }, [walletManager, updateConnectedWallets, isRestoring])
 
   const value: WalletContextValue = {
     walletManager,
     account,
     isConnected: account !== null,
     connectedWallets,
+    isRestoring,
     connect,
     connectAdditional,
     disconnect,

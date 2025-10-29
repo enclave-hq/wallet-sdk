@@ -6,7 +6,7 @@ import { ERC20_ABI, getUSDTAddress, getUSDCAddress } from './abis/erc20'
 import './App.css'
 
 function App() {
-  const { walletManager, connectedWallets, switchPrimaryWallet } = useWallet()
+  const { walletManager, connectedWallets, switchPrimaryWallet, isRestoring } = useWallet()
   const { account, isConnected, address, chainId } = useAccount()
   const { connect, connectAdditional, isConnecting, error: connectError } = useConnect()
   const { disconnect, isDisconnecting } = useDisconnect()
@@ -362,6 +362,15 @@ function App() {
       </header>
 
       <main className="App-main">
+        {/* Restoring Connection Status */}
+        {isRestoring && (
+          <section className="section">
+            <div className="info-box" style={{ textAlign: 'center', padding: '1rem' }}>
+              <p>🔄 Restoring wallet connection...</p>
+            </div>
+          </section>
+        )}
+
         {/* Wallet Status */}
         <section className="section">
           <h2>📊 Wallet Status</h2>

@@ -49,10 +49,8 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
 
     this.registry = new AdapterRegistry()
 
-    // Restore previous connections
-    if (this.config.enableStorage) {
-      this.restoreFromStorage()
-    }
+    // Note: No longer auto-restoring connection in constructor
+    // Async operations should be handled in WalletProvider by calling restoreFromStorage()
   }
 
   // ===== Connection Management =====
@@ -199,15 +197,15 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
 
     const oldPrimary = this.primaryWallet?.currentAccount || null
 
-    // 移除旧主钱包的监听
+    // Remove listeners from old primary wallet
     if (this.primaryWallet) {
       this.removeAdapterListeners(this.primaryWallet)
     }
 
-    // 设置新主钱包
+    // Set new primary wallet
     this.setPrimaryWallet(adapter)
 
-    // 设置新主钱包的监听
+    // Setup listeners for new primary wallet
     this.setupAdapterListeners(adapter, true)
 
     if (this.config.enableStorage) {
@@ -220,14 +218,14 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
   }
 
   /**
-   * 获取主钱包账户
+   * Get primary wallet account
    */
   getPrimaryAccount(): Account | null {
     return this.primaryWallet?.currentAccount || null
   }
 
   /**
-   * 获取所有已连接的钱包
+   * Get all connected wallets
    */
   getConnectedWallets(): ConnectedWallet[] {
     return Array.from(this.connectedWallets.values()).map(adapter => ({
@@ -241,16 +239,16 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
   }
 
   /**
-   * 根据链类型获取钱包
+   * Get wallet by chain type
    */
   getWalletByChainType(chainType: ChainType): IWalletAdapter | null {
     return this.connectedWallets.get(chainType) || null
   }
 
-  // ===== 签名 =====
+  // ===== Signing =====
 
   /**
-   * 使用主钱包签名
+   * Sign message with primary wallet
    */
   async signMessage(message: string): Promise<string> {
     if (!this.primaryWallet) {
@@ -261,7 +259,7 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
   }
 
   /**
-   * 使用指定链类型的钱包签名
+   * Sign message with wallet of specified chain type
    */
   async signMessageWithChainType(message: string, chainType?: ChainType): Promise<string> {
     if (!chainType) {
@@ -277,7 +275,7 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
   }
 
   /**
-   * 签名 TypedData（仅 EVM）
+   * Sign TypedData (EVM only)
    */
   async signTypedData(typedData: any, chainType?: ChainType): Promise<string> {
     const adapter = chainType
@@ -296,7 +294,7 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
   }
 
   /**
-   * 签名交易（使用主钱包）
+   * Sign transaction (with primary wallet)
    */
   async signTransaction(transaction: any): Promise<string> {
     if (!this.primaryWallet) {
@@ -311,7 +309,7 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
   }
 
   /**
-   * 使用指定链类型的钱包签名交易
+   * Sign transaction with wallet of specified chain type
    */
   async signTransactionWithChainType(transaction: any, chainType?: ChainType): Promise<string> {
     if (!chainType) {
@@ -330,10 +328,10 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
     return adapter.signTransaction(transaction)
   }
 
-  // ===== 链切换 =====
+  // ===== Chain Switching =====
 
   /**
-   * 请求切换链（仅 EVM）
+   * Request chain switch (EVM only)
    */
   async requestSwitchChain(chainId: number, options?: {
     addChainIfNotExists?: boolean
@@ -351,7 +349,7 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
       await this.primaryWallet.switchChain(chainId)
       return this.primaryWallet.currentAccount!
     } catch (error: any) {
-      // 如果链不存在且配置了自动添加
+      // If chain doesn't exist and auto-add is configured
       if (options?.addChainIfNotExists && options.chainConfig && this.primaryWallet.addChain) {
         await this.primaryWallet.addChain(options.chainConfig)
         await this.primaryWallet.switchChain(chainId)
@@ -361,10 +359,10 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
     }
   }
 
-  // ===== 合约调用 =====
+  // ===== Contract Calls =====
 
   /**
-   * 读取合约
+   * Read contract
    */
   async readContract<T = any>(
     address: string,
@@ -389,7 +387,7 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
   }
 
   /**
-   * 写入合约
+   * Write contract
    */
   async writeContract(
     address: string,
@@ -425,7 +423,7 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
   }
 
   /**
-   * 估算 Gas
+   * Estimate gas
    */
   async estimateGas(
     address: string,
@@ -450,7 +448,7 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
   }
 
   /**
-   * 等待交易确认
+   * Wait for transaction confirmation
    */
   async waitForTransaction(
     txHash: string,
@@ -472,10 +470,10 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
     return adapter.waitForTransaction(txHash, confirmations)
   }
 
-  // ===== Provider 访问 =====
+  // ===== Provider Access =====
 
   /**
-   * 获取主钱包 Provider
+   * Get primary wallet Provider
    */
   getProvider(): any {
     if (!this.primaryWallet) {
@@ -486,7 +484,7 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
   }
 
   /**
-   * 获取指定链类型的 Provider
+   * Get Provider by chain type
    */
   getProviderByChainType(chainType: ChainType): any {
     const adapter = this.connectedWallets.get(chainType)
@@ -497,24 +495,24 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
     return adapter.getProvider()
   }
 
-  // ===== 私有方法 =====
+  // ===== Private Methods =====
 
   /**
-   * 设置主钱包
+   * Set primary wallet
    */
   private setPrimaryWallet(adapter: IWalletAdapter): void {
     this.primaryWallet = adapter
   }
 
   /**
-   * 判断钱包是否支持链切换
+   * Check if wallet supports chain switching
    */
   private canSwitchChain(adapter: IWalletAdapter): boolean {
     return !!adapter.switchChain
   }
 
   /**
-   * 设置适配器事件监听
+   * Setup adapter event listeners
    */
   private setupAdapterListeners(adapter: IWalletAdapter, isPrimary: boolean): void {
     adapter.on('accountChanged', (account: Account | null) => {
@@ -564,17 +562,17 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
   }
 
   /**
-   * 移除适配器事件监听
+   * Remove adapter event listeners
    */
   private removeAdapterListeners(adapter: IWalletAdapter | null): void {
     if (!adapter) return
     adapter.removeAllListeners()
   }
 
-  // ===== 存储 =====
+  // ===== Storage =====
 
   /**
-   * 保存到存储
+   * Save to storage
    */
   private saveToStorage(): void {
     if (typeof window === 'undefined' || !this.config.enableStorage) {
@@ -583,6 +581,8 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
 
     const data: StorageData = {
       current: this.primaryWallet?.currentAccount?.universalAddress || null,
+      primaryWalletType: this.primaryWallet?.type,
+      primaryChainId: this.primaryWallet?.currentAccount?.chainId,
       history: this.getHistoryRecords(),
     }
 
@@ -597,15 +597,140 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
   }
 
   /**
-   * 从存储恢复
+   * Restore from storage
+   * Returns a Promise that can be used for auto-reconnection
    */
-  private restoreFromStorage(): void {
-    // 注意：自动重连可能需要用户授权，这里只是读取历史记录
-    // 实际重连需要用户主动调用 connect()
+  async restoreFromStorage(): Promise<Account | null> {
+    if (typeof window === 'undefined' || !this.config.enableStorage) {
+      return null
+    }
+
+    try {
+      const stored = localStorage.getItem(`${this.config.storagePrefix}data`)
+      if (!stored) {
+        console.debug('[WalletManager] No stored wallet data found')
+        return null
+      }
+
+      const data: StorageData = JSON.parse(stored)
+      console.debug('[WalletManager] Restoring from storage:', data)
+      
+      // Cannot restore if primary wallet info is missing
+      if (!data.primaryWalletType || !data.current) {
+        console.debug('[WalletManager] Missing primary wallet info in storage')
+        return null
+      }
+
+      // Get adapter
+      const adapter = this.registry.getAdapter(data.primaryWalletType)
+      if (!adapter) {
+        console.debug('[WalletManager] Adapter not found for type:', data.primaryWalletType)
+        return null
+      }
+
+      // Check if wallet is available
+      const isAvailable = await adapter.isAvailable()
+      if (!isAvailable) {
+        console.debug('[WalletManager] Wallet not available:', data.primaryWalletType)
+        return null
+      }
+
+      console.debug('[WalletManager] Wallet is available, attempting restoration')
+
+      // For browser wallets (e.g., MetaMask), try to silently get authorized accounts first
+      if (adapter.chainType === ChainType.EVM && data.primaryWalletType === WalletType.METAMASK) {
+        try {
+          // Try to silently get authorized accounts (no popup)
+          const provider = typeof window !== 'undefined' ? (window as any).ethereum : null
+          if (provider) {
+            const accounts = await provider.request({
+              method: 'eth_accounts',
+            })
+
+            console.debug('[WalletManager] Checking authorized accounts:', accounts)
+
+            if (accounts && accounts.length > 0) {
+              // Check if account matches saved address
+              const savedAddress = data.current.split(':')[1] // Extract address from universalAddress
+              const currentAddress = accounts[0].toLowerCase()
+              
+              console.debug('[WalletManager] Comparing addresses - saved:', savedAddress, 'current:', currentAddress)
+              
+              if (currentAddress === savedAddress.toLowerCase()) {
+                // Authorized account found and address matches, call connect directly
+                // If account is already authorized, eth_requestAccounts should not popup
+                console.debug('[WalletManager] Address matches, attempting connect (should be silent if already authorized)')
+                try {
+                  const account = await adapter.connect(data.primaryChainId)
+                  
+                  // Set as primary wallet and setup listeners
+                  this.setPrimaryWallet(adapter)
+                  this.connectedWallets.set(adapter.chainType, adapter)
+                  this.setupAdapterListeners(adapter, true)
+                  this.emit('accountChanged', account)
+                  
+                  console.debug('[WalletManager] Connect successful')
+                  return account
+                } catch (connectError: any) {
+                  // If connection fails (might be user rejection), fail silently
+                  console.debug('[WalletManager] Connect failed (might be user rejection):', connectError?.message)
+                  return null
+                }
+              } else {
+                console.debug('[WalletManager] Address mismatch, will try normal connect')
+              }
+            } else {
+              console.debug('[WalletManager] No authorized accounts found')
+            }
+          }
+        } catch (silentError) {
+          // Silent connection failed, continue with normal connection
+          console.debug('Silent connection failed, trying normal connection:', silentError)
+        }
+      }
+
+      // For TronLink, similar handling
+      if (adapter.chainType === ChainType.TRON && data.primaryWalletType === WalletType.TRONLINK) {
+        try {
+          const tronWeb = (adapter as any).getTronWeb?.()
+          if (tronWeb && tronWeb.defaultAddress?.base58) {
+            // TronLink is authorized, connect directly
+            const account = await adapter.connect(data.primaryChainId)
+            
+            // Set as primary wallet
+            this.setPrimaryWallet(adapter)
+            this.connectedWallets.set(adapter.chainType, adapter)
+            this.setupAdapterListeners(adapter, true)
+            this.emit('accountChanged', account)
+            
+            return account
+          }
+        } catch (silentError) {
+          console.debug('Silent TronLink connection failed:', silentError)
+        }
+      }
+
+      // Try normal connection (may popup)
+      const account = await adapter.connect(data.primaryChainId)
+
+      // Set as primary wallet
+      this.setPrimaryWallet(adapter)
+      this.connectedWallets.set(adapter.chainType, adapter)
+      this.setupAdapterListeners(adapter, true)
+
+      // Don't save to storage here again to avoid loop
+      this.emit('accountChanged', account)
+
+      return account
+    } catch (error) {
+      // Silently handle errors, might be user rejection or wallet unavailable
+      console.debug('Failed to restore wallet from storage:', error)
+      return null
+    }
   }
 
   /**
-   * 清除存储
+   * Clear storage
    */
   private clearStorage(): void {
     if (typeof window === 'undefined') {
@@ -620,7 +745,7 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
   }
 
   /**
-   * 获取历史记录
+   * Get history records
    */
   private getHistoryRecords(): WalletHistoryRecord[] {
     const records: WalletHistoryRecord[] = []

@@ -269,6 +269,10 @@ export interface WalletHistoryRecord {
 export interface StorageData {
   /** 当前 Universal Address */
   current: UniversalAddress | null
+  /** 主钱包类型（用于自动恢复连接） */
+  primaryWalletType?: WalletType
+  /** 主钱包的 ChainID（用于自动恢复连接） */
+  primaryChainId?: number
   /** 历史记录 */
   history: WalletHistoryRecord[]
 }
