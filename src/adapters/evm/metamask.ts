@@ -197,8 +197,7 @@ export class MetaMaskAdapter extends BrowserWalletAdapter {
    * 切换链
    */
   async switchChain(chainId: number): Promise<void> {
-    this.ensureConnected()
-
+    // 在连接过程中允许切换链，不需要检查连接状态
     const provider = this.getBrowserProvider()
 
     try {

@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2025-01-27
+
+### Fixed
+- **Connection Flow**: Fixed `switchChain` method to work during connection process
+  - Removed `ensureConnected()` check from `switchChain` method
+  - Allows chain switching during wallet connection without connection state validation
+  - Resolves "Wallet metamask is not connected" error during initial connection
+
+### Technical Details
+- Modified `switchChain` method to skip connection state validation
+- This allows the method to be called during the connection process when wallet state is still `CONNECTING`
+
 ## [1.1.1] - 2025-01-27
 
 ### Fixed
