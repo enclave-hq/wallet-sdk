@@ -83,11 +83,11 @@ export class WalletDetector {
   }
 
   /**
-   * 检测 MetaMask
+   * 检测 MetaMask（现在支持所有 window.ethereum 钱包）
    */
   private isMetaMaskAvailable(): boolean {
     const w = window as any
-    return !!(w.ethereum && w.ethereum.isMetaMask)
+    return !!w.ethereum
   }
 
   /**

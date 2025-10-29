@@ -86,7 +86,14 @@ export const CHAIN_INFO: Record<number, ChainInfo> = {
       symbol: 'BNB',
       decimals: 18,
     },
-    rpcUrls: ['https://data-seed-prebsc-1-s1.binance.org:8545'],
+    rpcUrls: [
+      'https://data-seed-prebsc-2-s1.binance.org:8545',
+      'https://data-seed-prebsc-1-s2.binance.org:8545',
+      'https://data-seed-prebsc-2-s2.binance.org:8545',
+      'https://data-seed-prebsc-1-s3.binance.org:8545',
+      'https://data-seed-prebsc-2-s3.binance.org:8545',
+      'https://data-seed-prebsc-1-s1.binance.org:8545' // 原来的主节点作为最后备选
+    ],
     blockExplorerUrls: ['https://testnet.bscscan.com'],
   },
   

@@ -2,7 +2,7 @@
  * MetaMask 适配器
  */
 
-import { createWalletClient, createPublicClient, custom, type WalletClient, type PublicClient } from 'viem'
+import { createWalletClient, createPublicClient, custom, http, type WalletClient, type PublicClient } from 'viem'
 import { BrowserWalletAdapter } from '../base/browser-wallet-adapter'
 import {
   WalletType,
@@ -72,10 +72,13 @@ export class MetaMaskAdapter extends BrowserWalletAdapter {
         transport: custom(provider),
       })
 
-      // 使用 MetaMask provider 作为 transport，确保使用正确的 RPC
+      // 使用我们配置的 RPC 节点进行读取操作，避免 MetaMask 内部 RPC 问题
+      const chainInfo = getChainInfo(finalChainId)
+      const primaryRpcUrl = chainInfo?.rpcUrls[0] // 使用第一个（最可靠的）RPC 节点
+      
       this.publicClient = createPublicClient({
         chain: viemChain,
-        transport: custom(provider),
+        transport: primaryRpcUrl ? http(primaryRpcUrl) : custom(provider), // 优先使用我们的 RPC，降级到 MetaMask provider
       }) as any
 
       // 创建账户信息
@@ -168,7 +171,7 @@ export class MetaMaskAdapter extends BrowserWalletAdapter {
         value: transaction.value ? `0x${BigInt(transaction.value).toString(16)}` : undefined,
         data: transaction.data || '0x',
         gas: transaction.gas ? `0x${BigInt(transaction.gas).toString(16)}` : undefined,
-        gasPrice: transaction.gasPrice ? `0x${BigInt(transaction.gasPrice).toString(16)}` : undefined,
+        gasPrice: transaction.gasPrice && transaction.gasPrice !== 'auto' ? `0x${BigInt(transaction.gasPrice).toString(16)}` : undefined,
         maxFeePerGas: transaction.maxFeePerGas ? `0x${BigInt(transaction.maxFeePerGas).toString(16)}` : undefined,
         maxPriorityFeePerGas: transaction.maxPriorityFeePerGas ? `0x${BigInt(transaction.maxPriorityFeePerGas).toString(16)}` : undefined,
         nonce: transaction.nonce !== undefined ? `0x${transaction.nonce.toString(16)}` : undefined,
@@ -284,6 +287,21 @@ export class MetaMaskAdapter extends BrowserWalletAdapter {
     }
 
     try {
+      // 调试日志
+      console.log('🔍 [MetaMask writeContract] params.gasPrice:', params.gasPrice, 'type:', typeof params.gasPrice);
+      
+      // 处理 gasPrice
+      let processedGasPrice: bigint | 'auto' | undefined;
+      if (!params.gasPrice) {
+        processedGasPrice = undefined;
+      } else if (params.gasPrice === 'auto') {
+        processedGasPrice = undefined; // viem 会自动获取 gas price
+      } else {
+        processedGasPrice = BigInt(params.gasPrice);
+      }
+      
+      console.log('🔍 [MetaMask writeContract] processedGasPrice:', processedGasPrice);
+      
       const txHash = await this.walletClient.writeContract({
         address: params.address as `0x${string}`,
         abi: params.abi,
@@ -291,7 +309,7 @@ export class MetaMaskAdapter extends BrowserWalletAdapter {
         ...(params.args ? { args: params.args as readonly any[] } : {}),
         value: params.value ? BigInt(params.value) : undefined,
         gas: params.gas ? BigInt(params.gas) : undefined,
-        gasPrice: params.gasPrice ? BigInt(params.gasPrice) : undefined,
+        gasPrice: processedGasPrice,
       } as any)
 
       return txHash
