@@ -1,5 +1,5 @@
 /**
- * 适配器注册表
+ * Adapter Registry
  */
 
 import { IWalletAdapter, WalletType, ChainType } from './types'
@@ -8,7 +8,7 @@ import { TronLinkAdapter } from '../adapters/tron/tronlink'
 import { EVMPrivateKeyAdapter } from '../adapters/evm/private-key'
 
 /**
- * 适配器注册表
+ * Adapter Registry
  */
 export class AdapterRegistry {
   private adapters: Map<WalletType, () => IWalletAdapter> = new Map()
@@ -18,26 +18,26 @@ export class AdapterRegistry {
   }
 
   /**
-   * 注册默认适配器
+   * Register default adapters
    */
   private registerDefaultAdapters(): void {
-    // EVM 适配器
+    // EVM adapters
     this.register(WalletType.METAMASK, () => new MetaMaskAdapter())
     this.register(WalletType.PRIVATE_KEY, () => new EVMPrivateKeyAdapter())
 
-    // Tron 适配器
+    // Tron adapters
     this.register(WalletType.TRONLINK, () => new TronLinkAdapter())
   }
 
   /**
-   * 注册适配器
+   * Register adapter
    */
   register(type: WalletType, factory: () => IWalletAdapter): void {
     this.adapters.set(type, factory)
   }
 
   /**
-   * 获取适配器
+   * Get adapter
    */
   getAdapter(type: WalletType): IWalletAdapter | null {
     const factory = this.adapters.get(type)
@@ -48,14 +48,14 @@ export class AdapterRegistry {
   }
 
   /**
-   * 判断适配器是否已注册
+   * Check if adapter is registered
    */
   has(type: WalletType): boolean {
     return this.adapters.has(type)
   }
 
   /**
-   * 获取所有已注册的适配器类型
+   * Get all registered adapter types
    */
   getRegisteredTypes(): WalletType[] {
     return Array.from(this.adapters.keys())

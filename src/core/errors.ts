@@ -1,9 +1,9 @@
 /**
- * 错误类型定义
+ * Error Type Definitions
  */
 
 /**
- * 基础错误类
+ * Base Error Class
  */
 export class WalletSDKError extends Error {
   constructor(
@@ -18,7 +18,7 @@ export class WalletSDKError extends Error {
 }
 
 /**
- * 钱包未连接错误
+ * Wallet Not Connected Error
  */
 export class WalletNotConnectedError extends WalletSDKError {
   constructor(walletType?: string) {
@@ -34,7 +34,7 @@ export class WalletNotConnectedError extends WalletSDKError {
 }
 
 /**
- * 钱包不可用错误
+ * Wallet Not Available Error
  */
 export class WalletNotAvailableError extends WalletSDKError {
   constructor(walletType: string, downloadUrl?: string) {
@@ -48,7 +48,7 @@ export class WalletNotAvailableError extends WalletSDKError {
 }
 
 /**
- * 连接被拒绝错误
+ * Connection Rejected Error
  */
 export class ConnectionRejectedError extends WalletSDKError {
   constructor(walletType: string) {
@@ -62,7 +62,7 @@ export class ConnectionRejectedError extends WalletSDKError {
 }
 
 /**
- * 链不支持错误
+ * Chain Not Supported Error
  */
 export class ChainNotSupportedError extends WalletSDKError {
   constructor(chainId: number, walletType: string) {
@@ -76,7 +76,7 @@ export class ChainNotSupportedError extends WalletSDKError {
 }
 
 /**
- * 签名被拒绝错误
+ * Signature Rejected Error
  */
 export class SignatureRejectedError extends WalletSDKError {
   constructor(message?: string) {
@@ -89,7 +89,7 @@ export class SignatureRejectedError extends WalletSDKError {
 }
 
 /**
- * 交易失败错误
+ * Transaction Failed Error
  */
 export class TransactionFailedError extends WalletSDKError {
   constructor(txHash: string, reason?: string) {
@@ -103,7 +103,7 @@ export class TransactionFailedError extends WalletSDKError {
 }
 
 /**
- * 方法不支持错误
+ * Method Not Supported Error
  */
 export class MethodNotSupportedError extends WalletSDKError {
   constructor(method: string, walletType: string) {

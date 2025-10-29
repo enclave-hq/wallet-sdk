@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.3] - 2025-10-29
+
+### Changed
+- **Documentation**: Improved internationalization and code readability
+  - Fixed incorrect dates in CHANGELOG.md
+  - Translated QUICKSTART.md from Chinese to English
+  - Replaced Chinese comments in core files with English
+  - Enhanced developer experience for international users
+
+### Technical Details
+- Updated MetaMask adapter comments to English
+- Updated wallet manager comments to English
+- Updated detector comments to English
+- Updated chain-info comments to English
+- Improved code maintainability and accessibility
+
 ## [1.1.2] - 2025-10-29
 
 ### Fixed

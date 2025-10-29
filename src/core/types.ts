@@ -13,7 +13,7 @@ export const ChainType = ChainUtilsChainType
 export type ChainType = ChainUtilsChainType
 
 /**
- * 钱包类型
+ * Wallet Types
  */
 export enum WalletType {
   METAMASK = 'metamask',
@@ -25,7 +25,7 @@ export enum WalletType {
 }
 
 /**
- * 钱包状态
+ * Wallet States
  */
 export enum WalletState {
   DISCONNECTED = 'disconnected',
@@ -34,35 +34,35 @@ export enum WalletState {
   ERROR = 'error',
 }
 
-// ========== 账户相关 ==========
+// ========== Account Related ==========
 
 /**
- * Universal Address (链无关地址)
- * 格式: "chainId:address"
+ * Universal Address (chain-agnostic address)
+ * Format: "chainId:address"
  */
 export type UniversalAddress = string
 
 /**
- * 账户信息
+ * Account Information
  */
 export interface Account {
   /** Universal Address (chainId:address) */
   universalAddress: UniversalAddress
-  /** 原生地址（如 0x... 或 T...） */
+  /** Native address (e.g., 0x... or T...) */
   nativeAddress: string
-  /** 链 ID */
+  /** Chain ID */
   chainId: number
-  /** 链类型 */
+  /** Chain Type */
   chainType: ChainType
-  /** 是否为活跃账户 */
+  /** Whether this is an active account */
   isActive: boolean
-  /** 账户余额（可选） */
+  /** Account balance (optional) */
   balance?: string
-  /** 账户名称（可选） */
+  /** Account name (optional) */
   name?: string
 }
 
-// ========== 适配器相关 ==========
+// ========== Adapter Related ==========
 
 /**
  * 钱包适配器接口
@@ -215,7 +215,7 @@ export interface ConnectedWallet {
   account: Account
   /** 钱包类型 */
   walletType: WalletType
-  /** 链类型 */
+  /** Chain Type */
   chainType: ChainType
   /** 是否为主钱包 */
   isPrimary: boolean

@@ -1,12 +1,12 @@
 /**
- * 事件系统
+ * Event System
  */
 
 import EventEmitter from 'eventemitter3'
 
 /**
- * 类型安全的事件发射器
- * 使用类型断言来提供类型安全的 API，同时避免与基类的类型冲突
+ * Type-safe Event Emitter
+ * Uses type assertion to provide type-safe API while avoiding type conflicts with base class
  */
 export class TypedEventEmitter<
   TEvents extends Record<string, (...args: any[]) => void>

@@ -75,16 +75,16 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
     // Connect wallet
     const account = await adapter.connect(chainId)
 
-    // 设置为主钱包
+    // Set as primary wallet
     this.setPrimaryWallet(adapter)
 
-    // 添加到已连接钱包池
+    // Add to connected wallet pool
     this.connectedWallets.set(adapter.chainType, adapter)
 
-    // 设置事件监听
+    // Setup event listeners
     this.setupAdapterListeners(adapter, true)
 
-    // 保存到存储
+    // Save to storage
     if (this.config.enableStorage) {
       this.saveToStorage()
     }
@@ -93,7 +93,7 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
   }
 
   /**
-   * 连接额外的钱包（不改变主钱包）
+   * Connect additional wallet (without changing primary wallet)
    */
   async connectAdditional(type: WalletType, chainId?: number): Promise<Account> {
     const adapter = this.registry.getAdapter(type)
@@ -108,10 +108,10 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
 
     const account = await adapter.connect(chainId)
 
-    // 添加到已连接钱包池（不设置为主钱包）
+    // Add to connected wallet pool (without setting as primary)
     this.connectedWallets.set(adapter.chainType, adapter)
 
-    // 设置事件监听
+    // Setup event listeners
     this.setupAdapterListeners(adapter, false)
 
     if (this.config.enableStorage) {
@@ -122,7 +122,7 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
   }
 
   /**
-   * 使用私钥连接（仅用于开发/测试）
+   * Connect with private key (for development/testing only)
    */
   async connectWithPrivateKey(privateKey: string, chainId?: number): Promise<Account> {
     const adapter = new EVMPrivateKeyAdapter()
@@ -138,22 +138,22 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
   }
 
   /**
-   * 断开主钱包
+   * Disconnect primary wallet
    */
   async disconnect(): Promise<void> {
     if (!this.primaryWallet) {
       return
     }
 
-    // 先保存 chainType，因为 disconnect() 后可能被清空
+    // Save chainType first, as it may be cleared after disconnect()
     const chainType = this.primaryWallet.chainType
 
     await this.primaryWallet.disconnect()
 
-    // 移除监听
+    // Remove listeners
     this.removeAdapterListeners(this.primaryWallet)
 
-    // 从已连接钱包池中移除
+    // Remove from connected wallet pool
     this.connectedWallets.delete(chainType)
 
     this.primaryWallet = null
@@ -166,7 +166,7 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
   }
 
   /**
-   * 断开所有钱包
+   * Disconnect all wallets
    */
   async disconnectAll(): Promise<void> {
     const wallets = Array.from(this.connectedWallets.values())
@@ -186,10 +186,10 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
     this.emit('disconnected')
   }
 
-  // ===== 主钱包管理 =====
+  // ===== Primary Wallet Management =====
 
   /**
-   * 切换主钱包
+   * Switch primary wallet
    */
   async switchPrimaryWallet(chainType: ChainType): Promise<Account> {
     const adapter = this.connectedWallets.get(chainType)
