@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2025-01-27
+
+### Fixed
+- **Multi-Wallet Support**: Fixed MetaMask adapter to support all `window.ethereum` wallets, not just MetaMask
+  - Removed `isMetaMask` check in `getBrowserProvider()` method
+  - Now supports TP Wallet, Trust Wallet, Coinbase Wallet, and other EIP-1193 compatible wallets
+  - Updated wallet detection logic to be more inclusive
+
+### Technical Details
+- Changed `w.ethereum && w.ethereum.isMetaMask ? w.ethereum : undefined` to `w.ethereum ? w.ethereum : undefined`
+- This allows any wallet that implements the EIP-1193 standard to work with the MetaMask adapter
+
 ## [1.1.0] - 2024-12-19
 
 ### Added

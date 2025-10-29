@@ -393,7 +393,8 @@ export class MetaMaskAdapter extends BrowserWalletAdapter {
       return undefined
     }
     const w = window as any
-    return w.ethereum && w.ethereum.isMetaMask ? w.ethereum : undefined
+    // 支持所有提供 window.ethereum 接口的钱包（MetaMask、TP钱包、Trust Wallet等）
+    return w.ethereum ? w.ethereum : undefined
   }
 
   /**

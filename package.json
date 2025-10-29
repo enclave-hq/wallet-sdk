@@ -1,6 +1,6 @@
 {
   "name": "@enclave-hq/wallet-sdk",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Multi-chain wallet adapter for Enclave - supports EVM and Tron ecosystems",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

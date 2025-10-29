@@ -87,6 +87,7 @@ export class WalletDetector {
    */
   private isMetaMaskAvailable(): boolean {
     const w = window as any
+    // 支持所有提供 window.ethereum 接口的钱包
     return !!w.ethereum
   }
 
