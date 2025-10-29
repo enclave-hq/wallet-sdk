@@ -1,108 +1,108 @@
-# 🚀 Wallet SDK 快速开始指南
+# 🚀 Wallet SDK Quick Start Guide
 
-## 📦 构建 SDK
+## 📦 Building the SDK
 
 ```bash
-# 1. 进入 wallet-sdk 目录
+# 1. Navigate to wallet-sdk directory
 cd wallet-sdk
 
-# 2. 安装依赖
+# 2. Install dependencies
 npm install
 
-# 3. 构建 SDK
+# 3. Build the SDK
 npm run build
 ```
 
-构建完成后，您会看到 `dist/` 目录，包含：
-- `index.js` - CommonJS 格式
-- `index.mjs` - ES Module 格式
-- `index.d.ts` - TypeScript 类型定义
-- `react/` - React 集成层
+After building, you'll see the `dist/` directory containing:
+- `index.js` - CommonJS format
+- `index.mjs` - ES Module format
+- `index.d.ts` - TypeScript type definitions
+- `react/` - React integration layer
 
-## 🧪 运行示例应用
+## 🧪 Running the Example App
 
 ```bash
-# 1. 进入示例目录
+# 1. Navigate to example directory
 cd example
 
-# 2. 安装依赖
+# 2. Install dependencies
 npm install
 
-# 3. 启动开发服务器
+# 3. Start development server
 npm run dev
 ```
 
-打开浏览器访问 [http://localhost:3000](http://localhost:3000)
+Open your browser and visit [http://localhost:3000](http://localhost:3000)
 
-## 🎯 示例应用功能
+## 🎯 Example App Features
 
-示例应用演示了所有 Wallet SDK 的核心功能：
+The example app demonstrates all core Wallet SDK features:
 
-### 1. **钱包连接**
-- 检测浏览器中可用的钱包（MetaMask, TronLink）
-- 一键连接钱包
-- 支持连接多个钱包
+### 1. **Wallet Connection**
+- Detect available wallets in browser (MetaMask, TronLink)
+- One-click wallet connection
+- Support for connecting multiple wallets
 
-### 2. **账户管理**
-- 显示当前连接的账户信息
-- 显示所有已连接的钱包
-- 切换主钱包
+### 2. **Account Management**
+- Display current connected account information
+- Display all connected wallets
+- Switch primary wallet
 
-### 3. **签名功能**
-- 签名任意消息
-- 实时显示签名结果
+### 3. **Signing Features**
+- Sign arbitrary messages
+- Real-time signature result display
 
-### 4. **链切换**
-- 切换到不同的 EVM 链（Ethereum, BSC, Polygon, Sepolia）
-- 自动处理链添加（如果钱包中没有该链）
+### 4. **Chain Switching**
+- Switch to different EVM chains (Ethereum, BSC, Polygon, Sepolia)
+- Automatically handle chain addition (if chain not in wallet)
 
-### 5. **事件监听**
-- 自动检测账户变化
-- 自动检测链变化
-- 实时更新 UI
+### 5. **Event Listening**
+- Automatically detect account changes
+- Automatically detect chain changes
+- Real-time UI updates
 
-## 🔧 开发建议
+## 🔧 Development Tips
 
-### 使用 Watch 模式
+### Using Watch Mode
 
-在开发时，可以同时运行 SDK 的 watch 模式和示例应用：
+During development, you can run both SDK watch mode and example app simultaneously:
 
 ```bash
-# 终端 1: SDK watch 模式
+# Terminal 1: SDK watch mode
 cd wallet-sdk
 npm run dev
 
-# 终端 2: 示例应用
+# Terminal 2: Example app
 cd wallet-sdk/example
 npm run dev
 ```
 
-这样，当您修改 SDK 代码时，示例应用会自动重新加载。
+This way, when you modify SDK code, the example app will automatically reload.
 
-### 测试不同的钱包
+### Testing Different Wallets
 
 1. **MetaMask (EVM)**
-   - 确保浏览器安装了 MetaMask 扩展
-   - 切换到您想测试的网络
+   - Ensure MetaMask extension is installed in browser
+   - Switch to the network you want to test
 
 2. **TronLink (Tron)**
-   - 确保浏览器安装了 TronLink 扩展
-   - 默认连接到 Tron 主网（Chain ID: 195）
+   - Ensure TronLink extension is installed in browser
+   - Default connection to Tron mainnet (Chain ID: 195)
 
-3. **私钥钱包（开发用）**
-   - 仅用于开发和测试
-   - 不要在生产环境中使用
+3. **Private Key Wallet (Development)**
+   - For development and testing only
+   - Do not use in production environment
 
-## 📝 代码示例
+## 📝 Code Examples
 
-### 基础连接
+### Basic Connection
 
 ```typescript
 import { WalletManager, WalletType } from '@enclave-hq/wallet-sdk'
 
 const walletManager = new WalletManager()
 
-// 连接 MetaMask
+// Connect MetaMask
 const account = await walletManager.connect(WalletType.METAMASK, 1)
 console.log('Connected:', account.universalAddress)
 ```
@@ -124,23 +124,23 @@ function MyComponent() {
 }
 ```
 
-### 签名消息
+### Signing Messages
 
 ```typescript
-// 基础签名
+// Basic signing
 const signature = await walletManager.signMessage('Hello World')
 
-// 使用特定链类型的钱包签名
+// Sign with specific chain type wallet
 const signature = await walletManager.signMessageWithChainType(
   'Hello Tron',
   ChainType.TRON
 )
 ```
 
-### 合约调用
+### Contract Calls
 
 ```typescript
-// 读取合约
+// Read contract
 const balance = await walletManager.readContract(
   '0x...tokenAddress',
   erc20Abi,
@@ -148,7 +148,7 @@ const balance = await walletManager.readContract(
   ['0x...userAddress']
 )
 
-// 写入合约
+// Write contract
 const txHash = await walletManager.writeContract(
   '0x...tokenAddress',
   erc20Abi,
@@ -156,34 +156,34 @@ const txHash = await walletManager.writeContract(
   ['0x...recipientAddress', '1000000000000000000']
 )
 
-// 等待交易确认
+// Wait for transaction confirmation
 const receipt = await walletManager.waitForTransaction(txHash)
 ```
 
-## 🐛 常见问题
+## 🐛 Common Issues
 
-### 1. "Wallet not available" 错误
+### 1. "Wallet not available" Error
 
-**原因**：钱包扩展未安装或未加载
+**Cause**: Wallet extension not installed or not loaded
 
-**解决**：
-- 确保安装了对应的钱包扩展（MetaMask/TronLink）
-- 刷新页面重试
-- 检查浏览器控制台是否有错误
+**Solution**:
+- Ensure corresponding wallet extension is installed (MetaMask/TronLink)
+- Refresh page and retry
+- Check browser console for errors
 
-### 2. "Connection rejected" 错误
+### 2. "Connection rejected" Error
 
-**原因**：用户在钱包中拒绝了连接请求
+**Cause**: User rejected connection request in wallet
 
-**解决**：
-- 在钱包弹窗中点击"连接"
-- 检查钱包是否已解锁
+**Solution**:
+- Click "Connect" in wallet popup
+- Check if wallet is unlocked
 
-### 3. "Chain not supported" 错误
+### 3. "Chain not supported" Error
 
-**原因**：钱包不支持或未添加该链
+**Cause**: Wallet doesn't support or hasn't added the chain
 
-**解决**：
+**Solution**:
 ```typescript
 await walletManager.requestSwitchChain(chainId, {
   addChainIfNotExists: true,
@@ -196,39 +196,37 @@ await walletManager.requestSwitchChain(chainId, {
 })
 ```
 
-### 4. 构建错误
+### 4. Build Errors
 
-如果遇到构建错误，尝试：
+If you encounter build errors, try:
 
 ```bash
-# 清理并重新安装
+# Clean and reinstall
 rm -rf node_modules package-lock.json
 npm install
 
-# 清理构建产物并重新构建
+# Clean build artifacts and rebuild
 rm -rf dist
 npm run build
 ```
 
-## 📚 下一步
+## 📚 Next Steps
 
-- 查看完整的 [API 文档](../docs/wallet-sdk/API接口.md)
-- 了解[架构设计](../docs/wallet-sdk/ARCHITECTURE.md)
-- 学习[集成指南](../docs/wallet-sdk/INTEGRATION.md)
+- Check out the complete [API Documentation](../docs/wallet-sdk/API接口.md)
+- Learn about [Architecture Design](../docs/wallet-sdk/ARCHITECTURE.md)
+- Follow the [Integration Guide](../docs/wallet-sdk/INTEGRATION.md)
 
-## 💡 提示
+## 💡 Tips
 
-1. **开发时使用私钥钱包**：快速测试，无需浏览器扩展
-2. **使用事件监听**：实时响应账户和链的变化
-3. **错误处理**：始终使用 try-catch 包裹异步操作
-4. **类型安全**：充分利用 TypeScript 类型定义
+1. **Use private key wallet for development**: Quick testing without browser extensions
+2. **Use event listeners**: Real-time response to account and chain changes
+3. **Error handling**: Always wrap async operations with try-catch
+4. **Type safety**: Make full use of TypeScript type definitions
 
-## 🤝 反馈
+## 🤝 Feedback
 
-如有问题或建议，请提交 [Issue](https://github.com/enclave-hq/enclave/issues)。
+If you have questions or suggestions, please submit an [Issue](https://github.com/enclave-hq/enclave/issues).
 
 ---
 
-**祝您开发愉快！🎉**
-
-
+**Happy coding! 🎉**

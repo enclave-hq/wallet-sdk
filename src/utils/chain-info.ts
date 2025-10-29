@@ -92,7 +92,7 @@ export const CHAIN_INFO: Record<number, ChainInfo> = {
       'https://data-seed-prebsc-2-s2.binance.org:8545',
       'https://data-seed-prebsc-1-s3.binance.org:8545',
       'https://data-seed-prebsc-2-s3.binance.org:8545',
-      'https://data-seed-prebsc-1-s1.binance.org:8545' // 原来的主节点作为最后备选
+      'https://data-seed-prebsc-1-s1.binance.org:8545' // Original main node as last fallback
     ],
     blockExplorerUrls: ['https://testnet.bscscan.com'],
   },

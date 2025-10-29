@@ -1,5 +1,5 @@
 /**
- * 钱包管理器（核心）
+ * Wallet Manager (Core)
  */
 
 import { TypedEventEmitter } from './events'
@@ -24,16 +24,16 @@ import {
 import { EVMPrivateKeyAdapter } from '../adapters/evm/private-key'
 
 /**
- * 钱包管理器
+ * Wallet Manager
  */
 export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
   private config: Required<WalletManagerConfig>
   private registry: AdapterRegistry
 
-  // 主钱包
+  // Primary wallet
   private primaryWallet: IWalletAdapter | null = null
 
-  // 已连接钱包池
+  // Connected wallet pool
   private connectedWallets: Map<ChainType, IWalletAdapter> = new Map()
 
   constructor(config: WalletManagerConfig = {}) {
@@ -49,16 +49,16 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
 
     this.registry = new AdapterRegistry()
 
-    // 恢复之前的连接
+    // Restore previous connections
     if (this.config.enableStorage) {
       this.restoreFromStorage()
     }
   }
 
-  // ===== 连接管理 =====
+  // ===== Connection Management =====
 
   /**
-   * 连接主钱包
+   * Connect primary wallet
    */
   async connect(type: WalletType, chainId?: number): Promise<Account> {
     const adapter = this.registry.getAdapter(type)
@@ -66,13 +66,13 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
       throw new WalletNotAvailableError(type)
     }
 
-    // 检查是否可用
+    // Check if available
     const isAvailable = await adapter.isAvailable()
     if (!isAvailable) {
       throw new WalletNotAvailableError(type)
     }
 
-    // 连接钱包
+    // Connect wallet
     const account = await adapter.connect(chainId)
 
     // 设置为主钱包

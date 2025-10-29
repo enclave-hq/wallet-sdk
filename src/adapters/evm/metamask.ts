@@ -1,5 +1,5 @@
 /**
- * MetaMask 适配器
+ * MetaMask Adapter
  */
 
 import { createWalletClient, createPublicClient, custom, http, type WalletClient, type PublicClient } from 'viem'
@@ -20,7 +20,7 @@ import { ConnectionRejectedError, SignatureRejectedError, TransactionFailedError
 import { getChainInfo } from '../../utils/chain-info'
 
 /**
- * MetaMask 适配器
+ * MetaMask Adapter
  */
 export class MetaMaskAdapter extends BrowserWalletAdapter {
   readonly type = WalletType.METAMASK
@@ -32,7 +32,7 @@ export class MetaMaskAdapter extends BrowserWalletAdapter {
   private publicClient: PublicClient | null = null
 
   /**
-   * 连接钱包
+   * Connect wallet
    */
   async connect(chainId?: number): Promise<Account> {
     await this.ensureAvailable()
@@ -42,7 +42,7 @@ export class MetaMaskAdapter extends BrowserWalletAdapter {
 
       const provider = this.getBrowserProvider()
 
-      // 请求账户
+      // Request accounts
       const accounts = await provider.request({
         method: 'eth_requestAccounts',
       })
@@ -51,13 +51,13 @@ export class MetaMaskAdapter extends BrowserWalletAdapter {
         throw new ConnectionRejectedError(this.type)
       }
 
-      // 获取当前链 ID
+      // Get current chain ID
       const currentChainId = await provider.request({
         method: 'eth_chainId',
       })
       const parsedChainId = parseInt(currentChainId, 16)
 
-      // 如果指定了链 ID 且不匹配，尝试切换
+      // If chain ID is specified and doesn't match, try to switch
       if (chainId && chainId !== parsedChainId) {
         await this.switchChain(chainId)
       }
@@ -65,16 +65,16 @@ export class MetaMaskAdapter extends BrowserWalletAdapter {
       const finalChainId = chainId || parsedChainId
       const viemChain = this.getViemChain(finalChainId) as any
 
-      // 创建客户端 (需要指定 chain 以支持 writeContract)
+      // Create clients (need to specify chain to support writeContract)
       this.walletClient = createWalletClient({
         account: accounts[0] as `0x${string}`,
         chain: viemChain,
         transport: custom(provider),
       })
 
-      // 使用我们配置的 RPC 节点进行读取操作，避免 MetaMask 内部 RPC 问题
+      // Use our configured RPC nodes for read operations to avoid MetaMask internal RPC issues
       const chainInfo = getChainInfo(finalChainId)
-      const primaryRpcUrl = chainInfo?.rpcUrls[0] // 使用第一个（最可靠的）RPC 节点
+      const primaryRpcUrl = chainInfo?.rpcUrls[0] // Use first (most reliable) RPC node
       
       this.publicClient = createPublicClient({
         chain: viemChain,

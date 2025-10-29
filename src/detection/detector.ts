@@ -1,20 +1,20 @@
 /**
- * 钱包检测器
+ * Wallet Detector
  */
 
 import { WalletType, ChainType, WalletAvailability } from '../core/types'
 import { SUPPORTED_WALLETS } from './supported-wallets'
 
 /**
- * 钱包检测器
+ * Wallet Detector
  */
 export class WalletDetector {
   /**
-   * 检测所有钱包可用性
+   * Detect all wallet availability
    */
   async detectAllWallets(): Promise<WalletAvailability[]> {
     const walletTypes = Object.values(WalletType).filter(
-      type => type !== WalletType.PRIVATE_KEY // 私钥钱包不需要检测
+      type => type !== WalletType.PRIVATE_KEY // Private key wallet does not need detection
     )
 
     const results = await Promise.all(
@@ -25,7 +25,7 @@ export class WalletDetector {
   }
 
   /**
-   * 检测特定钱包
+   * Detect specific wallet
    */
   async detectWallet(walletType: WalletType): Promise<WalletAvailability> {
     const metadata = SUPPORTED_WALLETS[walletType]
@@ -33,7 +33,7 @@ export class WalletDetector {
     if (!metadata) {
       return {
         walletType,
-        chainType: ChainType.EVM, // 默认
+        chainType: ChainType.EVM, // Default
         isAvailable: false,
         detected: false,
       }
@@ -51,7 +51,7 @@ export class WalletDetector {
   }
 
   /**
-   * 判断钱包是否可用
+   * Determine if wallet is available
    */
   private async isWalletAvailable(walletType: WalletType): Promise<boolean> {
     if (typeof window === 'undefined') {
@@ -70,11 +70,11 @@ export class WalletDetector {
 
       case WalletType.WALLETCONNECT:
       case WalletType.WALLETCONNECT_TRON:
-        // WalletConnect 不需要安装，总是可用
+        // WalletConnect does not need installation, always available
         return true
 
       case WalletType.PRIVATE_KEY:
-        // 私钥钱包总是可用
+        // Private key wallet is always available
         return true
 
       default:
