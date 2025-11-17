@@ -37,6 +37,18 @@ export abstract class WalletAdapter extends EventEmitter implements IWalletAdapt
   // 签名
   abstract signMessage(message: string): Promise<string>
 
+  /**
+   * Get the signer's address (implements ISigner interface)
+   * Returns the native address of the current account
+   */
+  async getAddress(): Promise<string> {
+    this.ensureConnected()
+    if (!this.currentAccount) {
+      throw new WalletNotConnectedError(this.type)
+    }
+    return this.currentAccount.nativeAddress
+  }
+
   signTransaction?(_transaction: any): Promise<string> {
     throw new MethodNotSupportedError('signTransaction', this.type)
   }

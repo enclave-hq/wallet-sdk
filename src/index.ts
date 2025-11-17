@@ -13,6 +13,7 @@ export { AdapterRegistry } from './core/adapter-registry'
 export type {
   Account,
   UniversalAddress,
+  ISigner,
   IWalletAdapter,
   WalletManagerConfig,
   WalletManagerEvents,

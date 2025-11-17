@@ -62,12 +62,41 @@ export interface Account {
   name?: string
 }
 
+// ========== Signer Interface ==========
+
+/**
+ * Signer interface
+ * Compatible with Enclave SDK's ISigner interface
+ * Provides a unified interface for signing operations
+ * 
+ * Note: The signer should handle the appropriate signature standard:
+ * - EIP-191 for EVM chains
+ * - TIP-191 for TRON
+ * - Other standards for other chains
+ */
+export interface ISigner {
+  /**
+   * Sign a message (raw message string, not hash)
+   * @param message - Raw message string to sign
+   *                  The signer should handle the appropriate signature standard
+   * @returns Signature (hex string with 0x prefix)
+   */
+  signMessage(message: string): Promise<string>;
+
+  /**
+   * Get the signer's address
+   * @returns Address (hex string with 0x prefix for EVM, Base58 for TRON)
+   */
+  getAddress(): Promise<string>;
+}
+
 // ========== Adapter Related ==========
 
 /**
  * 钱包适配器接口
+ * Extends ISigner to provide unified signing interface
  */
-export interface IWalletAdapter {
+export interface IWalletAdapter extends ISigner {
   // 元数据
   readonly type: WalletType
   readonly chainType: ChainType
