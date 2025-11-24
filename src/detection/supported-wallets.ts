@@ -49,11 +49,11 @@ export const SUPPORTED_WALLETS: Record<WalletType, WalletMetadata> = {
 
   [WalletType.TRONLINK]: {
     type: WalletType.TRONLINK,
-    name: 'TronLink',
+    name: 'TronWeb',
     chainType: ChainType.TRON,
     icon: 'https://www.tronlink.org/static/logoIcon.svg',
     downloadUrl: 'https://www.tronlink.org/',
-    description: 'The official Tron wallet',
+    description: 'TronWeb 兼容钱包（支持 TronLink、TokenPocket 等）',
   },
 
   [WalletType.WALLETCONNECT_TRON]: {

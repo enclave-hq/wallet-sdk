@@ -1,5 +1,9 @@
 /**
- * TronLink 适配器
+ * TronWeb 兼容钱包适配器
+ * 支持所有提供 TronWeb 接口的钱包，包括但不限于：
+ * - TronLink
+ * - TokenPocket
+ * - 其他 TronWeb 兼容的钱包
  */
 
 import { BrowserWalletAdapter } from '../base/browser-wallet-adapter'
@@ -16,12 +20,13 @@ import { createUniversalAddress } from '../../utils/address/universal-address'
 import { ConnectionRejectedError, SignatureRejectedError, TransactionFailedError } from '../../core/errors'
 
 /**
- * TronLink 适配器
+ * TronWeb 兼容钱包适配器
+ * 支持所有提供 window.tronWeb 或 window.tronLink.tronWeb 接口的钱包
  */
 export class TronLinkAdapter extends BrowserWalletAdapter {
   readonly type = WalletType.TRONLINK
   readonly chainType = ChainType.TRON
-  readonly name = 'TronLink'
+  readonly name = 'TronWeb'
   readonly icon = 'https://www.tronlink.org/static/logoIcon.svg'
 
   // Tron 主网链 ID
@@ -85,9 +90,9 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
   /**
    * 签名消息
    * 
-   * Note: TronLink supports two signing methods:
-   * - trx.sign(): Signs a transaction object
-   * - trx.signMessageV2(): Signs a plain text message (what we use here)
+   * Note: TronWeb 兼容钱包支持两种签名方法：
+   * - trx.sign(): 签名交易对象
+   * - trx.signMessageV2(): 签名纯文本消息（我们使用此方法）
    */
   async signMessage(message: string): Promise<string> {
     this.ensureConnected()
@@ -332,13 +337,19 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
   }
 
   /**
-   * 获取浏览器中的 TronWeb
+   * 获取浏览器中的 TronWeb 实例
+   * 支持所有 TronWeb 兼容的钱包，包括：
+   * - TronLink (window.tronLink.tronWeb 或 window.tronWeb)
+   * - TokenPocket (window.tronWeb)
+   * - 其他提供 window.tronWeb 接口的钱包
    */
   protected getBrowserProvider(): any | undefined {
     if (typeof window === 'undefined') {
       return undefined
     }
     const w = window as any
+    // 优先使用 window.tronWeb（所有 TronWeb 兼容钱包都提供）
+    // 如果没有，则尝试 window.tronLink.tronWeb（TronLink 特定）
     return w.tronWeb || w.tronLink?.tronWeb
   }
 
@@ -348,7 +359,7 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
   private getTronWeb(): any {
     const provider = this.getBrowserProvider()
     if (!provider) {
-      throw new Error('TronWeb not found')
+      throw new Error('未检测到 TronWeb 兼容的钱包。请安装 TronLink 或其他 TronWeb 兼容的钱包。')
     }
     return provider
   }
@@ -364,23 +375,28 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
    * 设置事件监听
    */
   protected setupEventListeners(): void {
-    // TronLink 事件监听
+    // TronWeb 兼容钱包事件监听
     if (typeof window === 'undefined') return
 
     const w = window as any
     
-    // TronLink 的事件监听方式可能因版本而异
-    // 某些版本使用 tronLink.on，某些版本使用 addEventListener
+    // TronWeb 兼容钱包的事件监听方式可能因钱包而异
+    // TronLink 使用 tronLink.on，其他钱包可能使用不同的方式
     try {
       if (w.tronLink && typeof w.tronLink.on === 'function') {
+        // TronLink 特定的事件监听
         w.tronLink.on('accountsChanged', this.handleAccountsChanged)
         w.tronLink.on('disconnect', this.handleDisconnect)
       } else if (w.tronWeb && w.tronWeb.eventServer) {
+        // 其他 TronWeb 兼容钱包可能使用 eventServer
         // 备用方案：使用轮询检测账户变化
+        this.startPolling()
+      } else {
+        // 如果没有事件监听支持，使用轮询
         this.startPolling()
       }
     } catch (error) {
-      console.warn('TronLink event listener setup failed:', error)
+      console.warn('TronWeb 钱包事件监听设置失败，使用轮询方式:', error)
       // 降级到轮询
       this.startPolling()
     }
@@ -396,11 +412,12 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
 
     try {
       if (w.tronLink && typeof w.tronLink.off === 'function') {
+        // TronLink 特定的事件移除
         w.tronLink.off('accountsChanged', this.handleAccountsChanged)
         w.tronLink.off('disconnect', this.handleDisconnect)
       }
     } catch (error) {
-      console.warn('TronLink event listener removal failed:', error)
+      console.warn('TronWeb 钱包事件监听移除失败:', error)
     }
 
     this.stopPolling()

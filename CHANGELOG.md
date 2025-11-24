@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2025-01-25
+
+### Added
+- **Multi-Wallet Support for Tron**: Extended TronLink adapter to support all TronWeb-compatible wallets
+  - Now supports TronLink, TokenPocket, and other wallets that provide TronWeb interface
+  - Improved wallet detection to check for both `window.tronWeb` and `window.tronLink.tronWeb`
+  - Enhanced event listener setup with better fallback mechanisms
+
+### Changed
+- **TronLink Adapter**: Renamed to TronWeb adapter internally while maintaining backward compatibility
+  - Updated adapter name from "TronLink" to "TronWeb" to reflect broader wallet support
+  - Improved error messages to guide users to install any TronWeb-compatible wallet
+  - Enhanced event listener setup with polling fallback for wallets without event support
+
+### Technical Details
+- Modified `getBrowserProvider()` to prioritize `window.tronWeb` (universal) over `window.tronLink.tronWeb` (TronLink-specific)
+- Updated wallet detection logic in `detector.ts` to be more inclusive
+- Improved event listener setup with better error handling and polling fallback
+- Updated wallet metadata to reflect TronWeb compatibility
+
 ## [1.1.6] - 2025-01-25
 
 ### Changed

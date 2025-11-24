@@ -92,10 +92,14 @@ export class WalletDetector {
   }
 
   /**
-   * 检测 TronLink
+   * 检测 TronWeb 兼容钱包
+   * 支持所有提供 window.tronWeb 或 window.tronLink 接口的钱包
+   * 包括但不限于：TronLink、TokenPocket 等
    */
   private isTronLinkAvailable(): boolean {
     const w = window as any
+    // 检测 window.tronWeb（所有 TronWeb 兼容钱包都提供）
+    // 或 window.tronLink（TronLink 特定）
     return !!(w.tronLink || w.tronWeb)
   }
 
