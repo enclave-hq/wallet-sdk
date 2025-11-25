@@ -44,32 +44,12 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
       const w = window as any
       const tronWeb = this.getTronWeb()
 
-      // 优先使用 TronLink 特定的 request API（如果存在）
-      if (w.tronLink && typeof w.tronLink.request === 'function') {
-        try {
-          const result = await w.tronLink.request({
-            method: 'tron_requestAccounts',
-          })
-
-          if (!result || result.code !== 200) {
-            throw new ConnectionRejectedError(this.type)
-          }
-        } catch (error: any) {
-          // 如果用户拒绝连接
-          if (error.code === 4001 || error.message?.includes('User rejected') || error.message?.includes('rejected')) {
-            throw new ConnectionRejectedError(this.type)
-          }
-          // 其他错误继续，尝试直接获取地址
-        }
-      }
-
       // 等待 TronWeb 就绪（如果支持 ready 属性）
       if (tronWeb.ready) {
         await tronWeb.ready
       }
 
-      // 获取当前地址
-      // 标准 TronWeb API: tronWeb.defaultAddress.base58
+      // 先检查是否已经有地址（已授权），避免不必要的连接请求
       let address = tronWeb.defaultAddress?.base58
       
       // 如果还没有地址，尝试从 hex 地址转换（某些钱包可能只提供 hex）
@@ -88,6 +68,49 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
           await new Promise(resolve => setTimeout(resolve, 100))
           address = tronWeb.defaultAddress?.base58
           if (address) break
+        }
+      }
+
+      // 只有在没有地址时才请求连接
+      if (!address) {
+        // 优先使用 TronLink 特定的 request API（如果存在）
+        if (w.tronLink && typeof w.tronLink.request === 'function') {
+          try {
+            const result = await w.tronLink.request({
+              method: 'tron_requestAccounts',
+            })
+
+            if (!result || result.code !== 200) {
+              throw new ConnectionRejectedError(this.type)
+            }
+          } catch (error: any) {
+            // 如果用户拒绝连接
+            if (error.code === 4001 || error.message?.includes('User rejected') || error.message?.includes('rejected')) {
+              throw new ConnectionRejectedError(this.type)
+            }
+            // 其他错误继续，尝试直接获取地址
+          }
+        }
+
+        // 请求连接后，再次尝试获取地址
+        address = tronWeb.defaultAddress?.base58
+        
+        // 如果还没有地址，尝试从 hex 地址转换
+        if (!address && tronWeb.defaultAddress?.hex && tronWeb.address && typeof tronWeb.address.fromHex === 'function') {
+          try {
+            address = tronWeb.address.fromHex(tronWeb.defaultAddress.hex)
+          } catch (e) {
+            // 转换失败
+          }
+        }
+
+        // 如果仍然没有地址，等待一小段时间让钱包初始化
+        if (!address) {
+          for (let i = 0; i < 20; i++) {
+            await new Promise(resolve => setTimeout(resolve, 100))
+            address = tronWeb.defaultAddress?.base58
+            if (address) break
+          }
         }
       }
 
