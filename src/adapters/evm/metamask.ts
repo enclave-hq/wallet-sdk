@@ -287,29 +287,98 @@ export class MetaMaskAdapter extends BrowserWalletAdapter {
 
     try {
       // 调试日志
-      console.log('🔍 [MetaMask writeContract] params.gasPrice:', params.gasPrice, 'type:', typeof params.gasPrice);
+      console.log('🔍 [MetaMask writeContract] Gas params:', {
+        gasPrice: params.gasPrice,
+        maxFeePerGas: params.maxFeePerGas,
+        maxPriorityFeePerGas: params.maxPriorityFeePerGas,
+      });
       
-      // 处理 gasPrice
-      let processedGasPrice: bigint | 'auto' | undefined;
-      if (!params.gasPrice) {
-        processedGasPrice = undefined;
-      } else if (params.gasPrice === 'auto') {
-        processedGasPrice = undefined; // viem 会自动获取 gas price
-      } else {
-        processedGasPrice = BigInt(params.gasPrice);
-      }
-      
-      console.log('🔍 [MetaMask writeContract] processedGasPrice:', processedGasPrice);
-      
-      const txHash = await this.walletClient.writeContract({
+      // 构建交易选项
+      const txOptions: any = {
         address: params.address as `0x${string}`,
         abi: params.abi,
         functionName: params.functionName,
         ...(params.args ? { args: params.args as readonly any[] } : {}),
         value: params.value ? BigInt(params.value) : undefined,
         gas: params.gas ? BigInt(params.gas) : undefined,
-        gasPrice: processedGasPrice,
-      } as any)
+      };
+
+      // EIP-1559 网络优先使用 maxFeePerGas 和 maxPriorityFeePerGas
+      // 如果提供了 EIP-1559 参数，使用它们；否则如果提供了 gasPrice，使用 gasPrice；否则让 viem 自动获取
+      if (params.maxFeePerGas || params.maxPriorityFeePerGas) {
+        // 使用 EIP-1559 参数
+        if (params.maxFeePerGas) {
+          txOptions.maxFeePerGas = BigInt(params.maxFeePerGas);
+        }
+        if (params.maxPriorityFeePerGas) {
+          txOptions.maxPriorityFeePerGas = BigInt(params.maxPriorityFeePerGas);
+        }
+        // 在 EIP-1559 网络中，不应该同时设置 gasPrice
+        console.log('🔍 [MetaMask writeContract] Using EIP-1559 gas params');
+      } else if (params.gasPrice) {
+        // Legacy 网络或明确指定 gasPrice
+        if (params.gasPrice === 'auto') {
+          // 让 viem 自动获取 gas price（会根据网络类型自动选择 EIP-1559 或 Legacy）
+          console.log('🔍 [MetaMask writeContract] Auto gas price - letting viem decide');
+        } else {
+          txOptions.gasPrice = BigInt(params.gasPrice);
+          console.log('🔍 [MetaMask writeContract] Using legacy gasPrice');
+        }
+      } else {
+        // 没有提供任何 gas 参数，主动获取并设置合理的 gas 费用
+        console.log('🔍 [MetaMask writeContract] No gas params - fetching and setting reasonable gas fees');
+        
+        // 获取当前网络的 gas 费用信息并设置
+        if (this.publicClient) {
+          try {
+            // 尝试获取 EIP-1559 费用（如果网络支持）
+            const feesPerGas = await this.publicClient.estimateFeesPerGas().catch(() => null);
+            if (feesPerGas) {
+              // 确保 maxPriorityFeePerGas 有合理的最小值（至少 0.1 Gwei = 100000000 wei）
+              // 如果太小，MetaMask 可能会使用默认值导致费用过高
+              const minPriorityFeeWei = BigInt(100_000_000); // 0.1 Gwei
+              const maxPriorityFeePerGas = feesPerGas.maxPriorityFeePerGas > minPriorityFeeWei 
+                ? feesPerGas.maxPriorityFeePerGas 
+                : minPriorityFeeWei;
+              
+              // maxFeePerGas 应该至少是 baseFee + priorityFee
+              // 如果估算的 maxFeePerGas 太小，增加一些缓冲
+              const adjustedMaxFeePerGas = feesPerGas.maxFeePerGas > maxPriorityFeePerGas
+                ? feesPerGas.maxFeePerGas
+                : maxPriorityFeePerGas + BigInt(1_000_000_000); // 至少增加 1 Gwei
+              
+              // 设置 EIP-1559 参数
+              txOptions.maxFeePerGas = adjustedMaxFeePerGas;
+              txOptions.maxPriorityFeePerGas = maxPriorityFeePerGas;
+              
+              const maxFeePerGasGwei = Number(adjustedMaxFeePerGas) / 1e9;
+              const maxPriorityFeePerGasGwei = Number(maxPriorityFeePerGas) / 1e9;
+              
+              console.log('💰 [MetaMask writeContract] Set gas fees (EIP-1559):', {
+                maxFeePerGas: `${maxFeePerGasGwei.toFixed(6)} Gwei`,
+                maxPriorityFeePerGas: `${maxPriorityFeePerGasGwei.toFixed(6)} Gwei`,
+                maxFeePerGasWei: adjustedMaxFeePerGas.toString(),
+                maxPriorityFeePerGasWei: maxPriorityFeePerGas.toString(),
+                note: '已设置合理的 gas 费用，避免 MetaMask 使用默认值',
+              });
+            } else {
+              // 回退到 Legacy gas price
+              const gasPrice = await this.publicClient.getGasPrice();
+              txOptions.gasPrice = gasPrice;
+              
+              const gasPriceGwei = Number(gasPrice) / 1e9;
+              console.log('💰 [MetaMask writeContract] Set gas price (Legacy):', {
+                gasPrice: `${gasPriceGwei.toFixed(6)} Gwei`,
+                gasPriceWei: gasPrice.toString(),
+              });
+            }
+          } catch (err) {
+            console.warn('⚠️ [MetaMask writeContract] Failed to estimate gas fees, letting viem auto-estimate:', err);
+          }
+        }
+      }
+      
+      const txHash = await this.walletClient.writeContract(txOptions as any)
 
       return txHash
     } catch (error: any) {

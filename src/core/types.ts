@@ -153,7 +153,9 @@ export interface ContractReadParams {
 export interface ContractWriteParams extends ContractReadParams {
   value?: string  // 发送的原生代币数量（wei）
   gas?: number
-  gasPrice?: string
+  gasPrice?: string  // Legacy gas price (for pre-EIP-1559 networks)
+  maxFeePerGas?: string  // EIP-1559: Maximum fee per gas (in wei)
+  maxPriorityFeePerGas?: string  // EIP-1559: Maximum priority fee per gas (in wei)
 }
 
 /**

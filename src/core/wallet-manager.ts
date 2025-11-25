@@ -397,7 +397,9 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
     options?: {
       value?: string
       gas?: number
-      gasPrice?: string
+      gasPrice?: string  // Legacy gas price (for pre-EIP-1559 networks)
+      maxFeePerGas?: string  // EIP-1559: Maximum fee per gas (in wei)
+      maxPriorityFeePerGas?: string  // EIP-1559: Maximum priority fee per gas (in wei)
     },
     chainType?: ChainType
   ): Promise<string> {
