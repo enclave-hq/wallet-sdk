@@ -41,21 +41,58 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
     try {
       this.setState(WalletState.CONNECTING)
 
+      const w = window as any
       const tronWeb = this.getTronWeb()
 
-      // 请求连接
-      const result = await tronWeb.request({
-        method: 'tron_requestAccounts',
-      })
+      // 优先使用 TronLink 特定的 request API（如果存在）
+      if (w.tronLink && typeof w.tronLink.request === 'function') {
+        try {
+          const result = await w.tronLink.request({
+            method: 'tron_requestAccounts',
+          })
 
-      if (!result || !result.code || result.code !== 200) {
-        throw new ConnectionRejectedError(this.type)
+          if (!result || result.code !== 200) {
+            throw new ConnectionRejectedError(this.type)
+          }
+        } catch (error: any) {
+          // 如果用户拒绝连接
+          if (error.code === 4001 || error.message?.includes('User rejected') || error.message?.includes('rejected')) {
+            throw new ConnectionRejectedError(this.type)
+          }
+          // 其他错误继续，尝试直接获取地址
+        }
+      }
+
+      // 等待 TronWeb 就绪（如果支持 ready 属性）
+      if (tronWeb.ready) {
+        await tronWeb.ready
       }
 
       // 获取当前地址
-      const address = tronWeb.defaultAddress?.base58
+      // 标准 TronWeb API: tronWeb.defaultAddress.base58
+      let address = tronWeb.defaultAddress?.base58
+      
+      // 如果还没有地址，尝试从 hex 地址转换（某些钱包可能只提供 hex）
+      if (!address && tronWeb.defaultAddress?.hex && tronWeb.address && typeof tronWeb.address.fromHex === 'function') {
+        try {
+          address = tronWeb.address.fromHex(tronWeb.defaultAddress.hex)
+        } catch (e) {
+          // 转换失败，继续尝试其他方式
+        }
+      }
+
+      // 如果仍然没有地址，等待一小段时间让钱包初始化
       if (!address) {
-        throw new Error('Failed to get Tron address')
+        // 某些钱包需要时间初始化，等待最多 2 秒
+        for (let i = 0; i < 20; i++) {
+          await new Promise(resolve => setTimeout(resolve, 100))
+          address = tronWeb.defaultAddress?.base58
+          if (address) break
+        }
+      }
+
+      if (!address) {
+        throw new Error('Failed to get Tron address. Please make sure your wallet is unlocked and try again.')
       }
 
       // Tron 主网的链 ID
@@ -161,6 +198,7 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
 
   /**
    * 读取合约
+   * 参考 webserver 的实现，使用 TronWeb 合约实例的标准 call() 方法
    */
   async readContract<T = any>(params: ContractReadParams): Promise<T> {
     this.ensureConnected()
@@ -168,16 +206,50 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
     try {
       const tronWeb = this.getTronWeb()
       
-      // 获取合约实例
-      const contract = await tronWeb.contract(params.abi, params.address)
+      if (!this.currentAccount) {
+        throw new Error('No account connected')
+      }
       
-      // 调用合约方法（只读）
-      const result = await contract[params.functionName](...(params.args || [])).call()
-      
-      return result as T
+      // 方法1: 使用 TronWeb 标准方法（参考 webserver 的实现）
+      try {
+        // 创建合约实例（使用 ABI）
+        const contract = await tronWeb.contract(params.abi, params.address)
+        
+        // 获取方法
+        const method = contract[params.functionName]
+        if (!method || typeof method !== 'function') {
+          throw new Error(`Function ${params.functionName} not found in contract ABI`)
+        }
+        
+        // 直接调用 call() 方法（不需要传入地址参数）
+        // 这是 TronWeb 的标准只读调用方式
+        const result = await method(...(params.args || [])).call()
+        
+        return result as T
+      } catch (method1Error: any) {
+        // 如果方法1失败，尝试方法2：不使用 ABI，直接使用合约地址
+        console.warn('⚠️ [方法1] TronWeb标准方法失败，尝试方法2:', method1Error.message)
+        
+        try {
+          // 方法2: 不使用 ABI，直接使用合约地址（某些钱包可能不支持 ABI）
+          const contract2 = await (tronWeb as any).contract().at(params.address)
+          const method2 = contract2[params.functionName]
+          
+          if (!method2 || typeof method2 !== 'function') {
+            throw new Error(`Function ${params.functionName} not found in contract`)
+          }
+          
+          const result = await method2(...(params.args || [])).call()
+          return result as T
+        } catch (method2Error: any) {
+          console.error('⚠️ [方法2] 也失败:', method2Error.message)
+          // 如果两种方法都失败，抛出原始错误
+          throw method1Error
+        }
+      }
     } catch (error: any) {
       console.error('Read contract error:', error)
-      throw new Error(`Failed to read contract: ${error.message}`)
+      throw new Error(`Failed to read contract: ${error.message || 'Unknown error'}`)
     }
   }
 
@@ -240,36 +312,55 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
       console.log('[TronLink] Transaction options:', options)
       console.log('[TronLink] Parameters:', parameter)
       
-      // 使用 triggerSmartContract 触发合约
-      const transaction = await tronWeb.transactionBuilder.triggerSmartContract(
+      // 构建函数选择器（参考 webserver 的实现）
+      const functionSelector = params.functionName + '(' + functionAbi.inputs.map((i: any) => i.type).join(',') + ')'
+      
+      console.log('[TronLink] Function selector:', functionSelector)
+      console.log('[TronLink] Transaction options:', options)
+      console.log('[TronLink] Parameters:', parameter)
+      
+      // 使用 triggerSmartContract 触发合约（参考 webserver 的实现）
+      const tx = await tronWeb.transactionBuilder.triggerSmartContract(
         params.address,
-        params.functionName + '(' + functionAbi.inputs.map((i: any) => i.type).join(',') + ')',
+        functionSelector,
         options,
         parameter,
         this.currentAccount!.nativeAddress
       )
       
-      console.log('[TronLink] Transaction built:', transaction)
+      console.log('[TronLink] Transaction built:', tx)
       
-      // 签名并广播交易
-      if (!transaction || !transaction.transaction) {
+      // 验证交易构建结果
+      if (!tx || !tx.transaction) {
         throw new Error('Failed to build transaction')
       }
       
-      const signedTx = await tronWeb.trx.sign(transaction.transaction)
-      const broadcast = await tronWeb.trx.sendRawTransaction(signedTx)
+      // 请求用户签名（参考 webserver 的实现）
+      console.log('[TronLink] Requesting user signature...')
+      const signedTx = await tronWeb.trx.sign(tx.transaction)
+      console.log('[TronLink] Transaction signed:', signedTx)
       
+      // ✅ 从签名的交易中提取 txID（这是最可靠的方式，参考 webserver）
+      const txID = signedTx.txID
+      console.log('[TronLink] Transaction hash (txID):', txID)
+      
+      // 广播交易（参考 webserver 的实现）
+      console.log('[TronLink] Broadcasting transaction...')
+      const broadcast = await tronWeb.trx.sendRawTransaction(signedTx)
       console.log('[TronLink] Broadcast result:', broadcast)
       
-      if (!broadcast.result) {
-        throw new Error(broadcast.message || 'Transaction broadcast failed')
+      // 验证广播结果
+      if (broadcast && broadcast.result === true) {
+        // 广播成功，返回交易哈希
+        return txID || broadcast.txid || ''
+      } else {
+        // 广播失败，但如果有 txID，仍然返回（交易可能已经上链）
+        if (txID) {
+          console.warn('[TronLink] Broadcast returned false but txID exists:', txID)
+          return txID
+        }
+        throw new Error(broadcast?.message || 'Transaction broadcast failed')
       }
-      
-      const txHash = broadcast.txid || broadcast.transaction?.txID
-      console.log('[TronLink] Transaction hash:', txHash)
-      
-      // 返回交易哈希
-      return txHash || ''
     } catch (error: any) {
       console.error('Write contract error:', error)
       
