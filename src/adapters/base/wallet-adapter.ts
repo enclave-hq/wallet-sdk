@@ -30,7 +30,9 @@ export abstract class WalletAdapter extends EventEmitter implements IWalletAdapt
   currentAccount: Account | null = null
 
   // 连接管理
-  abstract connect(chainId?: number): Promise<Account>
+  // Support both single chain ID and array of chain IDs for multi-chain support
+  // Most adapters will use the first chain ID if an array is provided
+  abstract connect(chainId?: number | number[]): Promise<Account>
   abstract disconnect(): Promise<void>
   abstract isAvailable(): Promise<boolean>
 

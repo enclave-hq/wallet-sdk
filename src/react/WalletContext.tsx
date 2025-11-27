@@ -18,8 +18,8 @@ export interface WalletContextValue {
   isRestoring: boolean  // Whether connection is being restored
 
   // Methods
-  connect: (type: WalletType, chainId?: number) => Promise<Account>
-  connectAdditional: (type: WalletType, chainId?: number) => Promise<Account>
+  connect: (type: WalletType, chainId?: number | number[]) => Promise<Account>
+  connectAdditional: (type: WalletType, chainId?: number | number[]) => Promise<Account>
   disconnect: () => Promise<void>
   switchPrimaryWallet: (chainType: ChainType) => Promise<Account>
   signMessage: (message: string) => Promise<string>
@@ -54,7 +54,7 @@ export function WalletProvider({ children, walletManager: externalWalletManager 
   }, [walletManager])
 
   // Connect wallet
-  const connect = useCallback(async (type: WalletType, chainId?: number) => {
+  const connect = useCallback(async (type: WalletType, chainId?: number | number[]) => {
     const account = await walletManager.connect(type, chainId)
     setAccount(account)
     updateConnectedWallets()
@@ -62,7 +62,7 @@ export function WalletProvider({ children, walletManager: externalWalletManager 
   }, [walletManager, updateConnectedWallets])
 
   // Connect additional wallet
-  const connectAdditional = useCallback(async (type: WalletType, chainId?: number) => {
+  const connectAdditional = useCallback(async (type: WalletType, chainId?: number | number[]) => {
     const account = await walletManager.connectAdditional(type, chainId)
     updateConnectedWallets()
     return account

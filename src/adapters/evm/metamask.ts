@@ -34,8 +34,11 @@ export class MetaMaskAdapter extends BrowserWalletAdapter {
   /**
    * Connect wallet
    */
-  async connect(chainId?: number): Promise<Account> {
+  async connect(chainId?: number | number[]): Promise<Account> {
     await this.ensureAvailable()
+    
+    // For MetaMask, use first chain ID if array is provided
+    const targetChainId = Array.isArray(chainId) ? chainId[0] : chainId
 
     try {
       this.setState(WalletState.CONNECTING)
@@ -58,11 +61,12 @@ export class MetaMaskAdapter extends BrowserWalletAdapter {
       const parsedChainId = parseInt(currentChainId, 16)
 
       // If chain ID is specified and doesn't match, try to switch
-      if (chainId && chainId !== parsedChainId) {
-        await this.switchChain(chainId)
+      // For MetaMask, use first chain ID if array is provided
+      if (targetChainId && targetChainId !== parsedChainId) {
+        await this.switchChain(targetChainId)
       }
 
-      const finalChainId = chainId || parsedChainId
+      const finalChainId = targetChainId || parsedChainId
       const viemChain = this.getViemChain(finalChainId) as any
 
       // Create clients (need to specify chain to support writeContract)

@@ -47,7 +47,7 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
       walletConnectProjectId: config.walletConnectProjectId ?? '',
     }
 
-    this.registry = new AdapterRegistry()
+    this.registry = new AdapterRegistry(this.config)
 
     // Note: No longer auto-restoring connection in constructor
     // Async operations should be handled in WalletProvider by calling restoreFromStorage()
@@ -56,9 +56,16 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
   // ===== Connection Management =====
 
   /**
+   * Check if adapter is registered for a wallet type
+   */
+  hasAdapter(type: WalletType): boolean {
+    return this.registry.has(type)
+  }
+
+  /**
    * Connect primary wallet
    */
-  async connect(type: WalletType, chainId?: number): Promise<Account> {
+  async connect(type: WalletType, chainId?: number | number[]): Promise<Account> {
     const adapter = this.registry.getAdapter(type)
     if (!adapter) {
       throw new WalletNotAvailableError(type)
@@ -93,7 +100,7 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
   /**
    * Connect additional wallet (without changing primary wallet)
    */
-  async connectAdditional(type: WalletType, chainId?: number): Promise<Account> {
+  async connectAdditional(type: WalletType, chainId?: number | number[]): Promise<Account> {
     const adapter = this.registry.getAdapter(type)
     if (!adapter) {
       throw new WalletNotAvailableError(type)
@@ -104,6 +111,7 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
       throw new WalletNotAvailableError(type)
     }
 
+    // Support both single chain ID and array of chain IDs for multi-chain support
     const account = await adapter.connect(chainId)
 
     // Add to connected wallet pool (without setting as primary)
@@ -156,8 +164,10 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
 
     this.primaryWallet = null
 
+    // Clear storage when disconnecting (important: prevents auto-restore on page reload)
+    // This ensures that if user explicitly disconnects, the connection won't be restored automatically
     if (this.config.enableStorage) {
-      this.saveToStorage()
+      this.clearStorage()
     }
 
     this.emit('disconnected')
@@ -712,7 +722,41 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
         }
       }
 
-      // Try normal connection (may popup)
+      // For WalletConnect Tron, use restoreSession method to avoid re-initialization
+      if (data.primaryWalletType === WalletType.WALLETCONNECT_TRON) {
+        try {
+          // Use restoreSession method which initializes provider once and checks for existing session
+          const wcAdapter = adapter as any
+          if (typeof wcAdapter.restoreSession === 'function') {
+            console.debug('[WalletManager] Attempting to restore WalletConnect Tron session...')
+            const account = await wcAdapter.restoreSession(data.primaryChainId)
+            
+            if (account) {
+              // Session restored successfully
+              console.debug('[WalletManager] WalletConnect Tron session restored successfully')
+              
+              // Set as primary wallet
+              this.setPrimaryWallet(adapter)
+              this.connectedWallets.set(adapter.chainType, adapter)
+              this.setupAdapterListeners(adapter, true)
+              this.emit('accountChanged', account)
+              
+              return account
+            } else {
+              console.debug('[WalletManager] No valid WalletConnect Tron session found')
+              // No valid session found - don't try to connect again as it will cause duplicate initialization
+              // Just return null to indicate restoration failed
+              return null
+            }
+          }
+        } catch (restoreError) {
+          console.debug('[WalletManager] WalletConnect Tron restore failed:', restoreError)
+          // Don't try to connect again - restoration failed, user needs to manually connect
+          return null
+        }
+      }
+
+      // Try normal connection (may popup) - only for non-WalletConnect Tron wallets
       const account = await adapter.connect(data.primaryChainId)
 
       // Set as primary wallet

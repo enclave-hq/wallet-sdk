@@ -16,6 +16,8 @@ function App() {
   const [messageToSign, setMessageToSign] = useState('Hello from Enclave Wallet SDK!')
   const [signature, setSignature] = useState<string>('')
   const [txSignature, setTxSignature] = useState<string>('')
+  const [txRecipientAddress, setTxRecipientAddress] = useState('')
+  const [txAmount, setTxAmount] = useState('1')
   const [availableWallets, setAvailableWallets] = useState<any[]>([])
   const [detectionDone, setDetectionDone] = useState(false)
   const [eventLogs, setEventLogs] = useState<Array<{ time: string; type: string; message: string }>>([])
@@ -94,6 +96,14 @@ function App() {
     
     // Quick detection first
     let wallets = await detector.detectAllWallets()
+    
+    // Filter out wallets that don't have adapters registered
+    // (e.g., WalletConnect without Project ID)
+    wallets = wallets.map(wallet => ({
+      ...wallet,
+      isAvailable: wallet.isAvailable && walletManager.hasAdapter(wallet.walletType),
+    }))
+    
     setAvailableWallets(wallets)
     
     // If TronLink not detected, wait and retry (TronLink injection is async)
@@ -105,6 +115,11 @@ function App() {
         addLog('Success', 'TronLink is ready')
         // Re-detect all wallets
         wallets = await detector.detectAllWallets()
+        // Filter again after re-detection
+        wallets = wallets.map(wallet => ({
+          ...wallet,
+          isAvailable: wallet.isAvailable && walletManager.hasAdapter(wallet.walletType),
+        }))
         setAvailableWallets(wallets)
       } else {
         addLog('Failed', 'TronLink not installed or not enabled')
@@ -120,6 +135,24 @@ function App() {
       await connect(type)
     } catch (error) {
       console.error('Connection error:', error)
+    }
+  }
+
+  // Connect wallet with multiple chains (for WalletConnect only)
+  const handleConnectMultiChain = async (type: WalletType, chains: number[]) => {
+    try {
+      if (type === WalletType.WALLETCONNECT) {
+        // Request multiple chains for WalletConnect
+        await connect(type, chains)
+        addLog('Info', `Connected to multiple chains: ${chains.join(', ')}`)
+      } else {
+        // For other wallets, use first chain
+        await connect(type, chains[0])
+        addLog('Info', `Connected to chain: ${chains[0]}`)
+      }
+    } catch (error) {
+      console.error('Multi-chain connection error:', error)
+      addLog('Error', `Multi-chain connection failed: ${error}`)
     }
   }
 
@@ -166,9 +199,109 @@ function App() {
         const sig = await signTransaction(tx)
         setTxSignature(sig)
       } else if (account?.chainType === ChainType.TRON) {
-        // Tron transaction example - requires a complete transaction object
-        // Note: This requires a real Tron transaction object
-        alert('Tron transaction signing requires creating a complete transaction object first. Please use TronWeb API to create a transaction, then call signTransaction.')
+        // Tron transaction example - create a USDT (TRC20) transfer transaction
+        // For WalletConnect Tron, we need to create the transaction object first using TronWeb
+        
+        // Validate input
+        if (!txRecipientAddress.trim()) {
+          alert('Please enter recipient address')
+          return
+        }
+        
+        const recipientAddress = txRecipientAddress.trim()
+        
+        // Validate Tron address format
+        if (!recipientAddress.match(/^T[1-9A-HJ-NP-Za-km-z]{33}$/)) {
+          alert('Invalid Tron address format. Tron addresses start with T and are 34 characters long.')
+          return
+        }
+        
+        // Validate amount
+        const amountNum = parseFloat(txAmount)
+        if (isNaN(amountNum) || amountNum <= 0) {
+          alert('Please enter a valid amount (greater than 0)')
+          return
+        }
+        
+        // Check if TronWeb is available (for creating transaction)
+        const w = window as any
+        if (!w.tronWeb && !w.tronLink?.tronWeb) {
+          alert('TronWeb is required to create transactions. Please install TronLink extension.')
+          return
+        }
+
+        const tronWeb = w.tronWeb || w.tronLink?.tronWeb
+        
+        try {
+          // USDT (TRC20) contract address on Tron Mainnet
+          const USDT_CONTRACT_ADDRESS = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'
+          
+          // Transfer amount: USDT has 6 decimals, so convert to smallest unit
+          const amount = Math.floor(amountNum * 1000000) // Convert to smallest unit (1 USDT = 1,000,000)
+          
+          addLog('Info', `Creating USDT transfer: ${amount / 1000000} USDT to ${recipientAddress}`)
+          
+          // Create USDT transfer transaction using TronWeb
+          // transfer(address to, uint256 amount) - standard ERC20 transfer function
+          const functionSelector = 'transfer(address,uint256)'
+          
+          // Parameters for TronWeb triggerSmartContract
+          // Address should be in hex format (TronWeb will handle conversion)
+          // Amount should be a string or number (TronWeb will handle encoding)
+          const addressHex = tronWeb.address.toHex(recipientAddress)
+          // Remove '41' prefix if present (Tron address prefix) and add '0x'
+          const addressParam = addressHex.startsWith('41') 
+            ? '0x' + addressHex.substring(2) 
+            : addressHex.startsWith('0x') 
+              ? addressHex 
+              : '0x' + addressHex
+          
+          // Amount as string (TronWeb will encode it)
+          const amountStr = amount.toString()
+          
+          addLog('Info', `Building transaction: ${amount / 1000000} USDT to ${recipientAddress}`)
+          
+          // Build the transaction using TronWeb triggerSmartContract
+          const transaction = await tronWeb.transactionBuilder.triggerSmartContract(
+            USDT_CONTRACT_ADDRESS,
+            functionSelector,
+            {
+              feeLimit: 100_000_000, // 100 TRX fee limit
+              callValue: 0, // No TRX sent, only USDT
+            },
+            [
+              { type: 'address', value: addressParam },
+              { type: 'uint256', value: amountStr },
+            ],
+            account.nativeAddress
+          )
+
+          if (!transaction || !transaction.transaction) {
+            throw new Error('Failed to build USDT transfer transaction')
+          }
+
+          addLog('Info', 'Transaction built, requesting signature...')
+
+          // Sign the transaction using WalletConnect
+          const signedTx = await signTransaction(transaction.transaction)
+          
+          // If signedTx is a string (txID), use it directly
+          // If it's a JSON string, parse it
+          let txHash: string
+          try {
+            const parsed = JSON.parse(signedTx)
+            txHash = parsed.txID || parsed.txid || signedTx
+          } catch {
+            txHash = signedTx
+          }
+          
+          setTxSignature(txHash)
+          addLog('Success', `USDT transfer transaction signed: ${txHash}`)
+        } catch (error: any) {
+          console.error('Tron USDT transaction creation/signing error:', error)
+          addLog('Error', `Failed to create/sign USDT transaction: ${error.message}`)
+          alert(`Failed to create/sign USDT transaction: ${error.message}`)
+        }
       }
     } catch (error) {
       console.error('Sign transaction error:', error)
@@ -422,14 +555,27 @@ function App() {
                       {availableWallets
                         .filter((w) => w.chainType === ChainType.EVM)
                         .map((wallet) => (
+                          <div key={wallet.walletType} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                           <button
-                            key={wallet.walletType}
                             onClick={() => handleConnect(wallet.walletType)}
                             className={`btn ${wallet.isAvailable ? 'btn-primary' : 'btn-disabled'}`}
                             disabled={!wallet.isAvailable || isConnecting}
                           >
                             {wallet.isAvailable ? '✅' : '❌'} {wallet.walletType}
                           </button>
+                            {/* Multi-chain button for WalletConnect */}
+                            {wallet.walletType === WalletType.WALLETCONNECT && wallet.isAvailable && (
+                              <button
+                                onClick={() => handleConnectMultiChain(wallet.walletType, [1, 56, 137, 42161, 10, 8453])}
+                                className="btn btn-secondary"
+                                disabled={isConnecting}
+                                style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}
+                                title="Connect to multiple chains: Ethereum (1), BSC (56), Polygon (137), Arbitrum (42161), Optimism (10), Base (8453)"
+                              >
+                                🔗 Multi-Chain (ETH, BSC, Polygon, Arbitrum, Optimism, Base)
+                              </button>
+                            )}
+                          </div>
                         ))}
                     </div>
                   </div>
@@ -548,12 +694,44 @@ function App() {
                 <p className="small">
                   {account?.chainType === ChainType.EVM
                     ? '✅ EVM Wallet - Will sign a test transaction'
-                    : '⚠️ Tron Wallet - Requires complete transaction object'}
+                    : '⚠️ Tron Wallet - Requires complete transaction object (created via TronWeb)'}
                 </p>
               </div>
+              {account?.chainType === ChainType.TRON && (
+                <>
+                  <div className="input-group">
+                    <label>
+                      <strong>Recipient Address (Tron):</strong>
+                    </label>
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="TQn9Y2khEsLMWDmHXz5Y8j5K5K5K5K5K5K5K"
+                      value={txRecipientAddress}
+                      onChange={(e) => setTxRecipientAddress(e.target.value)}
+                      disabled={isSigningTx}
+                    />
+                  </div>
+                  <div className="input-group">
+                    <label>
+                      <strong>Amount (USDT):</strong>
+                    </label>
+                    <input
+                      type="number"
+                      className="input"
+                      placeholder="1"
+                      min="0"
+                      step="0.000001"
+                      value={txAmount}
+                      onChange={(e) => setTxAmount(e.target.value)}
+                      disabled={isSigningTx}
+                    />
+                  </div>
+                </>
+              )}
               <button
                 onClick={handleSignTransaction}
-                disabled={isSigningTx}
+                disabled={isSigningTx || (account?.chainType === ChainType.TRON && (!txRecipientAddress.trim() || !txAmount))}
                 className="btn btn-primary"
               >
                 {isSigningTx ? 'Signing...' : 'Sign Transaction'}

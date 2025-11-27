@@ -54,7 +54,9 @@ export {
 export { WalletAdapter } from './adapters/base/wallet-adapter'
 export { BrowserWalletAdapter } from './adapters/base/browser-wallet-adapter'
 export { MetaMaskAdapter } from './adapters/evm/metamask'
+export { WalletConnectAdapter } from './adapters/evm/wallet-connect'
 export { TronLinkAdapter } from './adapters/tron/tronlink'
+export { WalletConnectTronAdapter } from './adapters/tron/wallet-connect'
 export { EVMPrivateKeyAdapter } from './adapters/evm/private-key'
 
 // ===== Auth =====

@@ -8,8 +8,8 @@ import { useWallet } from '../WalletContext'
 import { WalletType, Account } from '../../core/types'
 
 export interface UseConnectResult {
-  connect: (type: WalletType, chainId?: number) => Promise<Account>
-  connectAdditional: (type: WalletType, chainId?: number) => Promise<Account>
+  connect: (type: WalletType, chainId?: number | number[]) => Promise<Account>
+  connectAdditional: (type: WalletType, chainId?: number | number[]) => Promise<Account>
   isConnecting: boolean
   error: Error | null
 }
@@ -22,7 +22,7 @@ export function useConnect(): UseConnectResult {
   const [isConnecting, setIsConnecting] = useState(false)
   const [error, setError] = useState<Error | null>(null)
 
-  const connect = async (type: WalletType, chainId?: number): Promise<Account> => {
+  const connect = async (type: WalletType, chainId?: number | number[]): Promise<Account> => {
     setIsConnecting(true)
     setError(null)
 
@@ -38,7 +38,7 @@ export function useConnect(): UseConnectResult {
     }
   }
 
-  const connectAdditional = async (type: WalletType, chainId?: number): Promise<Account> => {
+  const connectAdditional = async (type: WalletType, chainId?: number | number[]): Promise<Account> => {
     setIsConnecting(true)
     setError(null)
 

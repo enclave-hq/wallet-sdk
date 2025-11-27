@@ -2,18 +2,22 @@
  * Adapter Registry
  */
 
-import { IWalletAdapter, WalletType, ChainType } from './types'
+import { IWalletAdapter, WalletType, ChainType, WalletManagerConfig } from './types'
 import { MetaMaskAdapter } from '../adapters/evm/metamask'
 import { TronLinkAdapter } from '../adapters/tron/tronlink'
 import { EVMPrivateKeyAdapter } from '../adapters/evm/private-key'
+import { WalletConnectAdapter } from '../adapters/evm/wallet-connect'
+import { WalletConnectTronAdapter } from '../adapters/tron/wallet-connect'
 
 /**
  * Adapter Registry
  */
 export class AdapterRegistry {
   private adapters: Map<WalletType, () => IWalletAdapter> = new Map()
+  private config: WalletManagerConfig
 
-  constructor() {
+  constructor(config: WalletManagerConfig = {}) {
+    this.config = config
     this.registerDefaultAdapters()
   }
 
@@ -24,6 +28,17 @@ export class AdapterRegistry {
     // EVM adapters
     this.register(WalletType.METAMASK, () => new MetaMaskAdapter())
     this.register(WalletType.PRIVATE_KEY, () => new EVMPrivateKeyAdapter())
+    
+    // Wallet Connect adapter (only register if projectId is provided)
+    if (this.config.walletConnectProjectId) {
+      this.register(WalletType.WALLETCONNECT, () => 
+        new WalletConnectAdapter(this.config.walletConnectProjectId!)
+      )
+      // Wallet Connect Tron adapter
+      this.register(WalletType.WALLETCONNECT_TRON, () => 
+        new WalletConnectTronAdapter(this.config.walletConnectProjectId!)
+      )
+    }
 
     // Tron adapters
     this.register(WalletType.TRONLINK, () => new TronLinkAdapter())

@@ -5,10 +5,11 @@ Complete demonstration application showcasing all core features and best practic
 ## 🎯 Features
 
 ### 1. Wallet Connection 🔌
-- ✅ **Auto-detection** - Detect installed wallets (MetaMask, TronLink)
+- ✅ **Auto-detection** - Detect installed wallets (MetaMask, TronLink, WalletConnect)
 - ✅ **Multi-chain Support** - EVM and Tron chains
 - ✅ **Multi-wallet Management** - Connect multiple wallets simultaneously
 - ✅ **Primary Wallet Switching** - Dynamically switch active wallet
+- ✅ **WalletConnect Support** - Connect to 170+ wallets via QR code
 
 ### 2. Signing Features ✍️
 - ✅ **Message Signing** (`signMessage`) - For authentication
@@ -46,13 +47,51 @@ cd example
 npm install
 ```
 
+### Configure WalletConnect (Optional but Recommended)
+
+To enable WalletConnect support, you need a WalletConnect Project ID:
+
+#### Step 1: Get Your WalletConnect Project ID
+
+1. Visit [WalletConnect Cloud](https://cloud.walletconnect.com/)
+2. Sign up for a free account (or log in if you already have one)
+3. Click "Create New Project" or select an existing project
+4. Fill in your project details:
+   - **Project Name**: e.g., "Enclave Wallet SDK Demo"
+   - **Homepage URL**: e.g., `http://localhost:3000` (for development)
+   - **Description**: Optional
+5. After creating the project, you'll see your **Project ID** (a long alphanumeric string)
+6. Copy the Project ID
+
+#### Step 2: Configure in Your Project
+
+Create a `.env` file in the `example` directory:
+
+```bash
+# Copy the example file
+cp .env.example .env
+```
+
+Then edit `.env` and replace `your-project-id-here` with your actual Project ID:
+
+```bash
+# .env
+VITE_WALLETCONNECT_PROJECT_ID=1234567890abcdef1234567890abcdef
+```
+
+**Important Notes:**
+- The `.env` file is git-ignored, so your Project ID won't be committed
+- If you don't provide a Project ID, WalletConnect will **not appear** in the wallet list
+- For production, use your production project's Project ID
+- You can use the same Project ID for development and production, or create separate projects
+
 ### Start Development Server
 
 ```bash
 npm run dev
 ```
 
-App will start at `http://localhost:5173`
+App will start at `http://localhost:3000`
 
 ### Build for Production
 
@@ -91,6 +130,8 @@ example/
 
 Click "Detect Wallets" button, the app will automatically detect:
 - ✅ MetaMask (EVM)
+- ✅ WalletConnect (EVM) - Requires Project ID configuration
+- ✅ WalletConnect (Tron) - Requires Project ID configuration (Limited support)
 - ✅ TronLink (Tron)
 - ✅ Other Web3 wallets
 
@@ -99,6 +140,13 @@ Click "Detect Wallets" button, the app will automatically detect:
 Select an available wallet and click to connect:
 - 🟢 Green checkmark ✅ - Wallet installed and available
 - 🔴 Red cross ❌ - Wallet not installed
+
+**WalletConnect Connection:**
+- Click on WalletConnect button
+- A QR code modal will appear
+- Scan the QR code with your mobile wallet app (MetaMask, Trust Wallet, etc.)
+- Approve the connection in your wallet
+- Connection will be established automatically
 
 ### Step 3: View Wallet Status
 

@@ -108,7 +108,7 @@ export interface IWalletAdapter extends ISigner {
   currentAccount: Account | null
   
   // 连接管理
-  connect(chainId?: number): Promise<Account>
+  connect(chainId?: number | number[]): Promise<Account>
   disconnect(): Promise<void>
   isAvailable(): Promise<boolean>
   

@@ -35,8 +35,11 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
   /**
    * 连接钱包
    */
-  async connect(chainId?: number): Promise<Account> {
+  async connect(chainId?: number | number[]): Promise<Account> {
     await this.ensureAvailable()
+    
+    // For TronLink, use first chain ID if array is provided
+    const targetChainId = Array.isArray(chainId) ? chainId[0] : chainId
 
     try {
       this.setState(WalletState.CONNECTING)
@@ -118,8 +121,8 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
         throw new Error('Failed to get Tron address. Please make sure your wallet is unlocked and try again.')
       }
 
-      // Tron 主网的链 ID
-      const tronChainId = chainId || TronLinkAdapter.TRON_MAINNET_CHAIN_ID
+      // Tron 主网的链 ID (use targetChainId which is already extracted from chainId)
+      const tronChainId = targetChainId || TronLinkAdapter.TRON_MAINNET_CHAIN_ID
 
       // 创建账户信息
       const account: Account = {

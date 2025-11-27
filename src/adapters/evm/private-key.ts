@@ -35,7 +35,7 @@ export class EVMPrivateKeyAdapter extends WalletAdapter {
   /**
    * 连接（导入私钥）
    */
-  async connect(chainId: number = 1): Promise<Account> {
+  async connect(chainId?: number | number[]): Promise<Account> {
     if (!this.privateKey) {
       throw new Error('Private key not set. Call setPrivateKey() first.')
     }
@@ -46,24 +46,27 @@ export class EVMPrivateKeyAdapter extends WalletAdapter {
       // 从私钥创建账户
       const account = privateKeyToAccount(this.privateKey as `0x${string}`)
 
+      // For private key adapter, use first chain ID if array is provided
+      const targetChainId = Array.isArray(chainId) ? chainId[0] : (chainId || 1)
+
       // 创建客户端
       this.walletClient = createWalletClient({
         account,
-        chain: this.getViemChain(chainId),
+        chain: this.getViemChain(targetChainId),
         transport: http(),
       })
 
       this.publicClient = createPublicClient({
-        chain: this.getViemChain(chainId) as any,
+        chain: this.getViemChain(targetChainId) as any,
         transport: http(),
       }) as any
 
       // 创建账户信息
       const address = formatEVMAddress(account.address)
       const accountInfo: Account = {
-        universalAddress: createUniversalAddress(chainId, address),
+        universalAddress: createUniversalAddress(targetChainId, address),
         nativeAddress: address,
-        chainId,
+        chainId: targetChainId,
         chainType: ChainType.EVM,
         isActive: true,
       }
