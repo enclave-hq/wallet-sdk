@@ -22,6 +22,9 @@ export enum WalletType {
   TRONLINK = 'tronlink',
   WALLETCONNECT_TRON = 'walletconnect-tron',
   PRIVATE_KEY = 'private-key',
+  // Deep Link (通用深度链接，与 WalletConnect 同级)
+  DEEP_LINK_EVM = 'deep-link-evm',
+  DEEP_LINK_TRON = 'deep-link-tron',
 }
 
 /**
@@ -111,6 +114,7 @@ export interface IWalletAdapter extends ISigner {
   connect(chainId?: number | number[]): Promise<Account>
   disconnect(): Promise<void>
   isAvailable(): Promise<boolean>
+  isConnected(): boolean
   
   // 签名
   signMessage(message: string): Promise<string>

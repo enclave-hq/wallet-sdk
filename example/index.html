@@ -5,10 +5,25 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Enclave Wallet SDK - Demo</title>
+    <!-- Telegram WebApp API -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // 检测 Telegram 环境并初始化
+      if (window.Telegram && window.Telegram.WebApp) {
+        console.log('[Telegram] Real Telegram WebApp detected')
+        window.Telegram.WebApp.ready()
+        // 自动展开以获得更好的显示效果
+        if (!window.Telegram.WebApp.isExpanded) {
+          window.Telegram.WebApp.expand()
+        }
+      } else {
+        console.log('[Telegram] Not in Telegram environment (normal browser)')
+      }
+    </script>
   </body>
 </html>
 

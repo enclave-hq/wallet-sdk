@@ -58,6 +58,16 @@ export { WalletConnectAdapter } from './adapters/evm/wallet-connect'
 export { TronLinkAdapter } from './adapters/tron/tronlink'
 export { WalletConnectTronAdapter } from './adapters/tron/wallet-connect'
 export { EVMPrivateKeyAdapter } from './adapters/evm/private-key'
+// Deep Link (通用深度链接，与 WalletConnect 同级)
+export { DeepLinkAdapter, DeepLinkProviderType } from './adapters/deep-link/adapter'
+export { IDeepLinkProvider } from './adapters/deep-link/providers/base'
+export { TokenPocketDeepLinkProvider } from './adapters/deep-link/providers/tokenpocket'
+export { TronLinkDeepLinkProvider } from './adapters/deep-link/providers/tronlink'
+export { ImTokenDeepLinkProvider } from './adapters/deep-link/providers/imtoken'
+export { MetaMaskDeepLinkProvider } from './adapters/deep-link/providers/metamask'
+export { OKXDeepLinkProvider } from './adapters/deep-link/providers/okx'
+// Legacy: 保留旧的 TronDeepLinkAdapter 以保持向后兼容
+export { TronDeepLinkAdapter, DeepLinkWalletType } from './adapters/tron/deep-link'
 
 // ===== Auth =====
 export { AuthMessageGenerator } from './auth/message-generator'

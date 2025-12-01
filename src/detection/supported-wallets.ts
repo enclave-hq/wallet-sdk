@@ -70,6 +70,22 @@ export const SUPPORTED_WALLETS: Record<WalletType, WalletMetadata> = {
     chainType: ChainType.EVM, // 可以用于任何链
     description: 'Import wallet using private key (for development)',
   },
+
+  [WalletType.DEEP_LINK_EVM]: {
+    type: WalletType.DEEP_LINK_EVM,
+    name: 'Deep Link (EVM)',
+    chainType: ChainType.EVM,
+    icon: 'https://tokenpocket.pro/icon.png',
+    description: 'Deep link connection for EVM chains (TokenPocket, ImToken, etc.)',
+  },
+
+  [WalletType.DEEP_LINK_TRON]: {
+    type: WalletType.DEEP_LINK_TRON,
+    name: 'Deep Link (TRON)',
+    chainType: ChainType.TRON,
+    icon: 'https://tokenpocket.pro/icon.png',
+    description: 'Deep link connection for TRON chain (TokenPocket, TronLink, etc.)',
+  },
 }
 
 /**

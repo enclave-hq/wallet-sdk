@@ -35,6 +35,14 @@ export abstract class WalletAdapter extends EventEmitter implements IWalletAdapt
   abstract connect(chainId?: number | number[]): Promise<Account>
   abstract disconnect(): Promise<void>
   abstract isAvailable(): Promise<boolean>
+  
+  /**
+   * Check if the wallet is currently connected
+   * @returns true if the wallet is connected (state is CONNECTED and has an account)
+   */
+  isConnected(): boolean {
+    return this.state === WalletState.CONNECTED && this.currentAccount !== null
+  }
 
   // 签名
   abstract signMessage(message: string): Promise<string>

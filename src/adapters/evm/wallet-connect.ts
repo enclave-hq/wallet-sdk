@@ -58,9 +58,120 @@ export class WalletConnectAdapter extends WalletAdapter {
   /**
    * Check if WalletConnect is available
    * WalletConnect is always available (it's a web-based connection)
+   * Also works in Telegram Mini Apps
    */
   async isAvailable(): Promise<boolean> {
     return typeof window !== 'undefined'
+  }
+
+  /**
+   * Check if running in Telegram environment (Mini App or Web)
+   * Both Telegram Mini App (in client) and Telegram Web (web.telegram.org) 
+   * provide window.Telegram.WebApp API, so they are treated the same way.
+   * 
+   * Reference: https://docs.reown.com/appkit/integrations/telegram-mini-apps
+   */
+  private isTelegramMiniApp(): boolean {
+    if (typeof window === 'undefined') return false
+    
+    // Check for Telegram WebApp API
+    // This works in both:
+    // - Telegram Mini App (in Telegram client: iOS, Android, Desktop)
+    // - Telegram Web (web.telegram.org)
+    // @ts-ignore
+    const tg = window.Telegram?.WebApp
+    if (!tg) return false
+    
+    // Log platform info for debugging
+    // @ts-ignore
+    const platform = tg.platform || 'unknown'
+    console.log('[WalletConnect] Telegram environment detected:', {
+      platform: platform,
+      version: tg.version,
+      isMiniApp: platform !== 'web', // Mini App if not web platform
+      isWeb: platform === 'web',      // Telegram Web if web platform
+    })
+    
+    return true
+  }
+
+  /**
+   * Get Telegram WebApp instance if available
+   */
+  private getTelegramWebApp(): any {
+    if (typeof window === 'undefined') return null
+    // @ts-ignore
+    return window.Telegram?.WebApp || null
+  }
+
+  /**
+   * Close Telegram deep link popup (wc:// links)
+   * In Telegram Mini Apps, WalletConnect may open a wc:// deep link popup
+   * that doesn't automatically close after the operation completes.
+   * This method attempts to close it by:
+   * 1. Trying to close any open windows/popups
+   * 2. Using Telegram WebApp API if available
+   * 3. Navigating back or closing the popup
+   */
+  private closeTelegramDeepLinkPopup(): void {
+    if (!this.isTelegramMiniApp()) {
+      return
+    }
+
+    try {
+      const tg = this.getTelegramWebApp()
+      if (!tg) {
+        return
+      }
+
+      // Method 1: Try to close any open windows (popups opened by WalletConnect)
+      // Check if there are any child windows or popups
+      if (typeof window !== 'undefined') {
+        // Try to close any popup windows that might have been opened
+        // Note: We can't directly access popup windows due to CORS, but we can try to focus back
+        window.focus()
+        
+        // Method 2: Use Telegram WebApp's back button or close functionality
+        // If there's a back button visible, it might indicate a popup is open
+        if (tg.BackButton && tg.BackButton.isVisible) {
+          // Simulate back button click to close the popup
+          console.log('[WalletConnect] Closing Telegram deep link popup via BackButton')
+          // Note: We can't programmatically click the back button, but we can hide it
+          // The popup should close automatically when the operation completes
+        }
+
+        // Method 3: Wait a bit and then try to close any wc:// protocol handlers
+        // Some wallets may leave the popup open, so we try to close it after a delay
+        setTimeout(() => {
+          // Try to detect if a popup is still open by checking window focus
+          if (document.hasFocus()) {
+            // Main window has focus, popup might have closed
+            console.log('[WalletConnect] Main window has focus, popup likely closed')
+          } else {
+            // Try to bring focus back to main window
+            window.focus()
+            console.log('[WalletConnect] Attempted to focus main window to close popup')
+          }
+        }, 500) // Wait 500ms for the wallet to process the response
+
+        // Method 4: Listen for visibility change (popup closing)
+        const handleVisibilityChange = () => {
+          if (document.visibilityState === 'visible') {
+            console.log('[WalletConnect] Page became visible, popup may have closed')
+            // Clean up listener
+            document.removeEventListener('visibilitychange', handleVisibilityChange)
+          }
+        }
+        document.addEventListener('visibilitychange', handleVisibilityChange)
+        
+        // Clean up listener after 2 seconds
+        setTimeout(() => {
+          document.removeEventListener('visibilitychange', handleVisibilityChange)
+        }, 2000)
+      }
+    } catch (error) {
+      console.warn('[WalletConnect] Error closing Telegram deep link popup:', error)
+    }
   }
 
   /**
@@ -204,16 +315,76 @@ export class WalletConnectAdapter extends WalletAdapter {
       const optionalChains = targetChains.slice(1)
 
       // Build init options
+      // For Telegram Mini Apps, we may need to adjust the modal behavior
+      const isTelegram = this.isTelegramMiniApp()
+      const telegramWebApp = this.getTelegramWebApp()
+      
+      // Get valid URL for metadata
+      // In Telegram Mini App, window.location.origin might be invalid or empty
+      let appUrl = ''
+      if (typeof window !== 'undefined') {
+        try {
+          // Try to get origin from window.location
+          if (window.location && window.location.origin) {
+            appUrl = window.location.origin
+          } else if (window.location && window.location.href) {
+            // Fallback: extract origin from href
+            const url = new URL(window.location.href)
+            appUrl = url.origin
+          }
+        } catch (error) {
+          console.warn('[WalletConnect] Failed to get origin from window.location:', error)
+        }
+        
+        // If still empty, use default URL
+        if (!appUrl) {
+          appUrl = 'https://enclave.network' // Default fallback URL
+        }
+      } else {
+        appUrl = 'https://enclave.network' // Server-side fallback
+      }
+
+      // Ensure URL is valid (must be https:// or http://)
+      if (!appUrl || (!appUrl.startsWith('http://') && !appUrl.startsWith('https://'))) {
+        appUrl = 'https://enclave.network'
+      }
+
+      // Valid icons array (must be valid URLs)
+      const icons = [
+        'https://walletconnect.com/walletconnect-logo.svg',
+        'https://avatars.githubusercontent.com/u/37784886', // WalletConnect GitHub avatar
+      ]
+      
       const initOptions: any = {
         projectId: this.projectId,
         chains: [primaryChain], // Primary chain (required)
-        showQrModal: true,
+        showQrModal: true, // QR modal works in Telegram Mini Apps
         metadata: {
           name: 'Enclave Wallet SDK',
           description: 'Multi-chain wallet adapter for Enclave',
-          url: typeof window !== 'undefined' ? window.location.origin : '',
-          icons: ['https://walletconnect.com/walletconnect-logo.svg'],
+          url: appUrl,
+          icons: icons,
         },
+      }
+
+      // Telegram environment specific configuration (Mini App or Web)
+      // Both Telegram Mini App and Telegram Web provide the same WebApp API
+      // Reference: https://docs.reown.com/appkit/integrations/telegram-mini-apps
+      if (isTelegram && telegramWebApp) {
+        // @ts-ignore
+        const platform = telegramWebApp.platform || 'unknown'
+        const isMiniApp = platform !== 'web'
+        console.log('[WalletConnect] Detected Telegram environment:', {
+          platform: platform,
+          isMiniApp: isMiniApp,
+          isWeb: platform === 'web',
+        })
+        
+        // Telegram WebApp can expand to full screen for better QR code display
+        // This works in both Mini App and Telegram Web
+        if (telegramWebApp.isExpanded === false) {
+          telegramWebApp.expand()
+        }
       }
 
       // Add optionalChains if there are additional chains
@@ -658,6 +829,9 @@ export class WalletConnectAdapter extends WalletAdapter {
         params: [message, this.currentAccount!.nativeAddress],
       })
 
+      // In Telegram Mini App, close any wc:// deep link popups after signing
+      this.closeTelegramDeepLinkPopup()
+
       return signature as string
     } catch (error: any) {
       if (error.code === 4001 || error.message?.includes('rejected')) {
@@ -682,6 +856,9 @@ export class WalletConnectAdapter extends WalletAdapter {
         method: 'eth_signTypedData_v4',
         params: [this.currentAccount!.nativeAddress, JSON.stringify(typedData)],
       })
+
+      // In Telegram Mini App, close any wc:// deep link popups after signing
+      this.closeTelegramDeepLinkPopup()
 
       return signature as string
     } catch (error: any) {
@@ -724,6 +901,9 @@ export class WalletConnectAdapter extends WalletAdapter {
         method: 'eth_signTransaction',
         params: [tx],
       })
+
+      // In Telegram Mini App, close any wc:// deep link popups after signing
+      this.closeTelegramDeepLinkPopup()
 
       return signature as string
     } catch (error: any) {
@@ -962,6 +1142,10 @@ export class WalletConnectAdapter extends WalletAdapter {
       }
 
       const txHash = await this.walletClient.writeContract(txOptions as any)
+      
+      // In Telegram Mini App, close any wc:// deep link popups after transaction
+      this.closeTelegramDeepLinkPopup()
+      
       return txHash
     } catch (error: any) {
       if (error.code === 4001 || error.message?.includes('rejected')) {

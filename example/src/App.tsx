@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useWallet, useAccount, useConnect, useDisconnect, useSignMessage, useSignTransaction } from '@enclave-hq/wallet-sdk/react'
-import { WalletType, ChainType, ConnectedWallet } from '@enclave-hq/wallet-sdk'
+import { WalletType, ChainType, ConnectedWallet, DeepLinkAdapter, DeepLinkProviderType } from '@enclave-hq/wallet-sdk'
 import { WalletDetector, getEVMWallets, getTronWallets } from '@enclave-hq/wallet-sdk'
 import { ERC20_ABI, getUSDTAddress, getUSDCAddress } from './abis/erc20'
 import './App.css'
@@ -12,6 +12,25 @@ function App() {
   const { disconnect, isDisconnecting } = useDisconnect()
   const { signMessage, isSigning, error: signError } = useSignMessage()
   const { signTransaction, isSigning: isSigningTx } = useSignTransaction()
+
+  // 检测 Telegram Mini App 环境
+  const [isTelegram, setIsTelegram] = React.useState(false)
+  React.useEffect(() => {
+    // @ts-ignore
+    const isTG = !!(window.Telegram && window.Telegram.WebApp)
+    setIsTelegram(isTG)
+    if (isTG) {
+      console.log('[App] Running in Telegram Mini App')
+      // @ts-ignore
+      const tg = window.Telegram.WebApp
+      console.log('[App] Telegram WebApp info:', {
+        version: tg.version,
+        platform: tg.platform,
+        isExpanded: tg.isExpanded,
+        viewportHeight: tg.viewportHeight,
+      })
+    }
+  }, [])
 
   const [messageToSign, setMessageToSign] = useState('Hello from Enclave Wallet SDK!')
   const [signature, setSignature] = useState<string>('')
@@ -30,6 +49,86 @@ function App() {
   const [isTransferring, setIsTransferring] = useState(false)
   const [transferTxHash, setTransferTxHash] = useState<string>('')
   const [contractError, setContractError] = useState<string>('')
+
+  // Deep link states (通用 DeepLink 适配器)
+  const [isDeepLinkAvailable, setIsDeepLinkAvailable] = useState(false)
+  const [deepLinkProviderType, setDeepLinkProviderType] = useState<DeepLinkProviderType>(DeepLinkProviderType.TOKENPOCKET)
+  const [deepLinkChainType, setDeepLinkChainType] = useState<ChainType>(ChainType.TRON)
+  const [deepLinkChainId, setDeepLinkChainId] = useState<number>(195) // TRON Mainnet
+  const [deepLinkAdapter, setDeepLinkAdapter] = useState<DeepLinkAdapter | null>(null)
+  const [deepLinkMessage, setDeepLinkMessage] = useState('Hello from Deep Link!')
+  const [deepLinkTxRecipient, setDeepLinkTxRecipient] = useState('')
+  const [deepLinkTxAmount, setDeepLinkTxAmount] = useState('1')
+
+  // 回调URL配置
+  const CALLBACK_BASE_URL = 'https://wallet-test.enclave-hq.com'
+  const CALLBACK_SCHEMA = `${CALLBACK_BASE_URL}${window.location.pathname}` // 客户端回调：钱包会打开这个URL
+  const CALLBACK_URL = `${CALLBACK_BASE_URL}/api/callback` // 服务端回调：钱包会POST到这个URL
+
+  // 检测深度链接可用性并初始化适配器
+  React.useEffect(() => {
+    const checkDeepLink = async () => {
+      try {
+        const adapter = new DeepLinkAdapter({
+          providerType: deepLinkProviderType,
+          callbackSchema: CALLBACK_SCHEMA, // 客户端回调URL
+          callbackUrl: CALLBACK_URL, // 服务端回调URL（可选）
+        })
+        const available = await adapter.isAvailable()
+        setDeepLinkAdapter(adapter)
+        
+        // 输出回调URL配置信息
+        addLog('Info', `Callback Schema: ${CALLBACK_SCHEMA}`)
+        addLog('Info', `Callback URL: ${CALLBACK_URL}`)
+        
+        // In Telegram Mini App, always enable operations even if detection fails
+        // Deep links should work in Telegram Mini App on mobile platforms
+        if (isTelegram) {
+          setIsDeepLinkAvailable(true)
+          addLog('Info', `Telegram Mini App detected - Deep link operations enabled`)
+        } else {
+          setIsDeepLinkAvailable(available)
+          if (available) {
+            addLog('Info', `Deep link available for ${deepLinkProviderType}`)
+          } else {
+            addLog('Warning', 'Deep link only available on mobile devices')
+          }
+        }
+      } catch (error: any) {
+        addLog('Error', `Failed to initialize deep link adapter: ${error.message}`)
+        setIsDeepLinkAvailable(false)
+      }
+    }
+    checkDeepLink()
+  }, [deepLinkProviderType, isTelegram])
+
+  // 页面加载时检查回调参数（处理从钱包返回的回调）
+  React.useEffect(() => {
+    const checkCallbackParams = () => {
+      const urlParams = new URLSearchParams(window.location.search)
+      const actionId = urlParams.get('actionId')
+      const result = urlParams.get('result')
+      const error = urlParams.get('error')
+      
+      if (actionId || result || error) {
+        addLog('Info', `Callback detected - actionId: ${actionId}, result: ${result ? 'present' : 'none'}, error: ${error || 'none'}`)
+        // DeepLinkAdapter 会自动处理这些参数
+      }
+    }
+    
+    // 页面加载时检查
+    checkCallbackParams()
+    
+    // 监听 URL 变化（用户从钱包返回时）
+    const handlePopState = () => {
+      checkCallbackParams()
+    }
+    window.addEventListener('popstate', handlePopState)
+    
+    return () => {
+      window.removeEventListener('popstate', handlePopState)
+    }
+  }, [])
 
   // Add event log
   const addLog = (type: string, message: string) => {
@@ -97,12 +196,43 @@ function App() {
     // Quick detection first
     let wallets = await detector.detectAllWallets()
     
+    // Log detection results for debugging
+    console.log('[App] Detected wallets (before filtering):', wallets.map(w => ({
+      type: w.walletType,
+      isAvailable: w.isAvailable,
+      hasAdapter: walletManager.hasAdapter(w.walletType),
+    })))
+    
     // Filter out wallets that don't have adapters registered
     // (e.g., WalletConnect without Project ID)
-    wallets = wallets.map(wallet => ({
-      ...wallet,
-      isAvailable: wallet.isAvailable && walletManager.hasAdapter(wallet.walletType),
-    }))
+    wallets = wallets.map(wallet => {
+      const hasAdapter = walletManager.hasAdapter(wallet.walletType)
+      const finalAvailable = wallet.isAvailable && hasAdapter
+      
+      // Log why wallet is not available
+      if (!finalAvailable) {
+        if (!wallet.isAvailable) {
+          console.log(`[App] Wallet ${wallet.walletType} not available (detection failed)`)
+        } else if (!hasAdapter) {
+          console.log(`[App] Wallet ${wallet.walletType} not available (adapter not registered)`)
+          if (wallet.walletType === WalletType.WALLETCONNECT || wallet.walletType === WalletType.WALLETCONNECT_TRON) {
+            console.warn(`[App] ⚠️ WalletConnect adapter not registered. Please check if VITE_WALLETCONNECT_PROJECT_ID is set in .env file.`)
+          }
+        }
+      }
+      
+      return {
+        ...wallet,
+        isAvailable: finalAvailable,
+      }
+    })
+    
+    // Log final results
+    console.log('[App] Available wallets (after filtering):', wallets.filter(w => w.isAvailable).map(w => w.walletType))
+    console.log('[App] Unavailable wallets:', wallets.filter(w => !w.isAvailable).map(w => ({
+      type: w.walletType,
+      reason: !walletManager.hasAdapter(w.walletType) ? 'adapter not registered' : 'detection failed',
+    })))
     
     setAvailableWallets(wallets)
     
@@ -317,6 +447,151 @@ function App() {
     }
   }
 
+  // Deep link: Sign message
+  const handleDeepLinkSignMessage = async () => {
+    if (!deepLinkAdapter) {
+      alert('Deep link adapter not initialized')
+      return
+    }
+
+    try {
+      // First, try to connect if not connected
+      if (!deepLinkAdapter.isConnected()) {
+        addLog('Info', `Connecting to ${deepLinkProviderType} via deep link...`)
+        await deepLinkAdapter.connect(deepLinkChainId)
+      }
+
+      addLog('Info', `Opening ${deepLinkProviderType} for message signing...`)
+      const signature = await deepLinkAdapter.signMessage(deepLinkMessage)
+      addLog('Success', `Message signed successfully: ${signature.substring(0, 20)}...`)
+      alert(`Message signed successfully!\nSignature: ${signature.substring(0, 20)}...`)
+    } catch (error: any) {
+      // Deep link may throw an error after opening the app
+      // This is expected behavior for some providers
+      if (error.message && (error.message.includes('opened') || error.message.includes('initiated'))) {
+        addLog('Success', `Opened ${deepLinkProviderType} for signing. Signature will be returned via callback.`)
+      } else {
+        addLog('Error', `Deep link error: ${error.message}`)
+        alert(`Deep link error: ${error.message}`)
+      }
+    }
+  }
+
+  // Deep link: Sign transaction
+  const handleDeepLinkSignTransaction = async () => {
+    if (!deepLinkAdapter) {
+      alert('Deep link adapter not initialized')
+      return
+    }
+
+    // Validate input
+    if (!deepLinkTxRecipient.trim()) {
+      alert('Please enter recipient address')
+      return
+    }
+
+    const recipientAddress = deepLinkTxRecipient.trim()
+
+    // Validate amount
+    const amountNum = parseFloat(deepLinkTxAmount)
+    if (isNaN(amountNum) || amountNum <= 0) {
+      alert('Please enter a valid amount (greater than 0)')
+      return
+    }
+
+    try {
+      let transaction: any
+
+      if (deepLinkChainType === ChainType.TRON) {
+        // Validate Tron address format
+        if (!recipientAddress.match(/^T[1-9A-HJ-NP-Za-km-z]{33}$/)) {
+          alert('Invalid Tron address format. Tron addresses start with T and are 34 characters long.')
+          return
+        }
+
+        // Check if TronWeb is available (for creating transaction)
+        const w = window as any
+        if (!w.tronWeb && !w.tronLink?.tronWeb) {
+          alert('TronWeb is required to create transactions. Please install TronLink extension.')
+          return
+        }
+
+        const tronWeb = w.tronWeb || w.tronLink?.tronWeb
+
+        // USDT (TRC20) contract address on Tron Mainnet
+        const USDT_CONTRACT_ADDRESS = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'
+        
+        // Transfer amount: USDT has 6 decimals
+        const amount = Math.floor(amountNum * 1000000)
+        
+        addLog('Info', `Creating USDT transfer transaction for deep link: ${amount / 1000000} USDT to ${recipientAddress}`)
+        
+        // Create USDT transfer transaction using TronWeb
+        const functionSelector = 'transfer(address,uint256)'
+        const addressHex = tronWeb.address.toHex(recipientAddress)
+        const addressParam = addressHex.startsWith('41') 
+          ? '0x' + addressHex.substring(2) 
+          : addressHex.startsWith('0x') 
+            ? addressHex 
+            : '0x' + addressHex
+        const amountStr = amount.toString()
+        
+        // Build the transaction
+        const txResult = await tronWeb.transactionBuilder.triggerSmartContract(
+          USDT_CONTRACT_ADDRESS,
+          functionSelector,
+          {
+            feeLimit: 100_000_000,
+            callValue: 0,
+          },
+          [
+            { type: 'address', value: addressParam },
+            { type: 'uint256', value: amountStr },
+          ],
+          account?.nativeAddress || tronWeb.defaultAddress.base58
+        )
+
+        if (!txResult || !txResult.transaction) {
+          throw new Error('Failed to build USDT transfer transaction')
+        }
+
+        transaction = txResult.transaction
+      } else {
+        // EVM chain - create a simple transfer transaction
+        // For EVM, we'll create a basic transaction object
+        // In a real app, you would use viem or ethers.js to build the transaction
+        transaction = {
+          to: recipientAddress,
+          value: `0x${BigInt(Math.floor(amountNum * 1e18)).toString(16)}`, // Convert to wei
+          chainId: deepLinkChainId,
+        }
+        addLog('Info', `Creating EVM transfer transaction for deep link: ${amountNum} ETH to ${recipientAddress}`)
+      }
+
+      // First, try to connect if not connected
+      if (!deepLinkAdapter.isConnected()) {
+        addLog('Info', `Connecting to ${deepLinkProviderType} via deep link...`)
+        await deepLinkAdapter.connect(deepLinkChainId)
+      }
+
+      addLog('Info', 'Transaction built, opening wallet app for signing...')
+      
+      // Sign using deep link
+      const signature = await deepLinkAdapter.signTransaction(transaction)
+      addLog('Success', `Transaction signed successfully: ${signature.substring(0, 20)}...`)
+      alert(`Transaction signed successfully!\nSignature: ${signature.substring(0, 20)}...`)
+    } catch (error: any) {
+      // Deep link may throw an error after opening the app
+      // This is expected behavior for some providers
+      if (error.message && (error.message.includes('opened') || error.message.includes('initiated'))) {
+        addLog('Success', `Opened ${deepLinkProviderType} for transaction signing. Signature will be returned via callback.`)
+      } else {
+        addLog('Error', `Deep link transaction error: ${error.message}`)
+        alert(`Deep link transaction error: ${error.message}`)
+      }
+    }
+  }
+
   // Switch chain (EVM only)
   const handleSwitchChain = async (newChainId: number) => {
     try {
@@ -489,6 +764,26 @@ function App() {
 
   return (
     <div className="App">
+      {/* Telegram Mini App 环境提示 */}
+      {isTelegram && (
+        <div style={{
+          padding: '10px',
+          background: '#0088cc',
+          color: 'white',
+          marginBottom: '20px',
+          borderRadius: '8px',
+          fontSize: '14px',
+          textAlign: 'center'
+        }}>
+          📱 Running in Telegram Mini App
+          {/* @ts-ignore */}
+          {window.Telegram?.WebApp?.version && (
+            <span style={{ marginLeft: '10px', opacity: 0.8 }}>
+              (v{window.Telegram.WebApp.version})
+            </span>
+          )}
+        </div>
+      )}
       <header className="App-header">
         <h1>🔐 Enclave Wallet SDK Demo</h1>
         <p className="subtitle">Multi-chain wallet adapter for EVM & Tron</p>
@@ -745,6 +1040,199 @@ function App() {
             </div>
           </section>
         )}
+
+        {/* Universal Deep Link Test */}
+        <section className="section">
+          <h2>🔗 Universal Deep Link (Mobile / Telegram Mini App)</h2>
+          <div className="info-box">
+            <p>
+              <strong>Deep Link Status:</strong>{' '}
+              {isDeepLinkAvailable ? (
+                <span style={{ color: 'green' }}>
+                  ✅ Available {isTelegram ? '(Telegram Mini App)' : '(Mobile Device)'}
+                </span>
+              ) : (
+                <span style={{ color: 'orange' }}>
+                  ⚠️ Only available on mobile devices or Telegram Mini App
+                </span>
+              )}
+            </p>
+            <p className="small">
+              Deep links can sign directly without establishing a connection first.
+              The wallet app will open and use the user's account automatically.
+              {isTelegram && (
+                <>
+                  <br />
+                  <strong>Telegram Mini App:</strong> Deep links work in Telegram Mini App on mobile platforms.
+                </>
+              )}
+            </p>
+          </div>
+
+          {/* Always show operations in Telegram Mini App, or if deep link is available */}
+          {(isDeepLinkAvailable || isTelegram) && (
+            <>
+              <div className="input-group" style={{ marginBottom: '1rem' }}>
+                <label>
+                  <strong>Select Wallet Provider:</strong>
+                </label>
+                <select
+                  value={deepLinkProviderType}
+                  onChange={(e) => setDeepLinkProviderType(e.target.value as DeepLinkProviderType)}
+                  className="input"
+                >
+                  <option value={DeepLinkProviderType.TOKENPOCKET}>TokenPocket (EVM + TRON)</option>
+                  <option value={DeepLinkProviderType.IMTOKEN}>ImToken (EVM + TRON)</option>
+                  <option value={DeepLinkProviderType.METAMASK}>MetaMask (EVM)</option>
+                  <option value={DeepLinkProviderType.OKX}>OKX (EVM + TRON)</option>
+                  <option value={DeepLinkProviderType.TRONLINK}>TronLink (TRON)</option>
+                </select>
+              </div>
+
+              <div className="input-group" style={{ marginBottom: '1rem' }}>
+                <label>
+                  <strong>Select Chain Type:</strong>
+                </label>
+                <select
+                  value={deepLinkChainType}
+                  onChange={(e) => {
+                    const chainType = e.target.value as ChainType
+                    setDeepLinkChainType(chainType)
+                    // Set default chain ID based on chain type
+                    if (chainType === ChainType.TRON) {
+                      setDeepLinkChainId(195) // TRON Mainnet
+                    } else {
+                      setDeepLinkChainId(1) // Ethereum Mainnet
+                    }
+                  }}
+                  className="input"
+                >
+                  <option value={ChainType.EVM}>EVM (Ethereum, BSC, Polygon, etc.)</option>
+                  <option value={ChainType.TRON}>TRON</option>
+                </select>
+              </div>
+
+              <div className="input-group" style={{ marginBottom: '1rem' }}>
+                <label>
+                  <strong>Chain ID:</strong>
+                </label>
+                <input
+                  type="number"
+                  value={deepLinkChainId}
+                  onChange={(e) => setDeepLinkChainId(parseInt(e.target.value) || 1)}
+                  className="input"
+                  placeholder="1 (Ethereum) or 195 (TRON)"
+                />
+              </div>
+
+              {/* Deep Link: Sign Message */}
+              <div className="contract-section" style={{ marginBottom: '1.5rem' }}>
+                <h3>1️⃣ Sign Message via Deep Link</h3>
+                <div className="input-group">
+                  <label>
+                    <strong>Message to Sign:</strong>
+                  </label>
+                  <textarea
+                    value={deepLinkMessage}
+                    onChange={(e) => setDeepLinkMessage(e.target.value)}
+                    placeholder="Enter message to sign..."
+                    rows={2}
+                    className="textarea"
+                  />
+                </div>
+                <button
+                  onClick={handleDeepLinkSignMessage}
+                  disabled={!deepLinkMessage.trim()}
+                  className="btn btn-primary"
+                >
+                  📱 Open {deepLinkProviderType} to Sign Message
+                </button>
+                <div className="info-box" style={{ marginTop: '0.5rem' }}>
+                  <p className="small">
+                    ⚠️ Note: Deep link will open the wallet app. Signature result will be returned via callback URL.
+                    {isTelegram && !isDeepLinkAvailable && (
+                      <> In Telegram Mini App, deep links may work even if detection shows unavailable.</>
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {/* Deep Link: Sign Transaction */}
+              <div className="contract-section">
+                <h3>2️⃣ Sign Transaction via Deep Link</h3>
+                <div className="info-box">
+                  <p className="small">
+                    {deepLinkChainType === ChainType.TRON
+                      ? 'This will create a USDT (TRC20) transfer transaction and open the wallet app for signing. TronWeb is required to build the transaction.'
+                      : 'This will create a transaction and open the wallet app for signing. For EVM chains, you can sign any transaction object.'}
+                  </p>
+                </div>
+                <div className="input-group">
+                  <label>
+                    <strong>Recipient Address ({deepLinkChainType === ChainType.TRON ? 'Tron' : 'EVM'}):</strong>
+                  </label>
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder={deepLinkChainType === ChainType.TRON ? 'TQn9Y2khEsLMWDmHXz5Y8j5K5K5K5K5K5K5K' : '0x...'}
+                    value={deepLinkTxRecipient}
+                    onChange={(e) => setDeepLinkTxRecipient(e.target.value)}
+                  />
+                </div>
+                <div className="input-group">
+                  <label>
+                    <strong>Amount ({deepLinkChainType === ChainType.TRON ? 'USDT' : 'Native Currency'}):</strong>
+                  </label>
+                  <input
+                    type="number"
+                    className="input"
+                    placeholder="1"
+                    min="0"
+                    step="0.000001"
+                    value={deepLinkTxAmount}
+                    onChange={(e) => setDeepLinkTxAmount(e.target.value)}
+                  />
+                </div>
+                <button
+                  onClick={handleDeepLinkSignTransaction}
+                  disabled={!deepLinkTxRecipient.trim() || !deepLinkTxAmount}
+                  className="btn btn-primary"
+                >
+                  📱 Open {deepLinkProviderType} to Sign Transaction
+                </button>
+                <div className="info-box" style={{ marginTop: '0.5rem' }}>
+                  <p className="small">
+                    ⚠️ Note: Deep link will open the wallet app. Transaction signature will be returned via callback URL.
+                    You need to implement callback handling to receive the signature result.
+                    {isTelegram && !isDeepLinkAvailable && (
+                      <> In Telegram Mini App, deep links may work even if detection shows unavailable.</>
+                    )}
+                  </p>
+                </div>
+              </div>
+            </>
+          )}
+
+          {!isDeepLinkAvailable && (
+            <div className="info-box">
+              <p>
+                <strong>💡 How to test Deep Link:</strong>
+              </p>
+              <ul style={{ textAlign: 'left', marginTop: '0.5rem' }}>
+                <li>Open this page on a mobile device (iOS/Android) or in Telegram Mini App</li>
+                <li>Ensure the selected wallet app (TokenPocket, ImToken, MetaMask, OKX, or TronLink) is installed</li>
+                <li>Deep link will automatically open the wallet app</li>
+                <li>Signature results are returned via callback URL (requires server-side handling)</li>
+                {isTelegram && (
+                  <li>
+                    <strong>Telegram Mini App:</strong> Deep links work on mobile platforms (iOS/Android), 
+                    but may not work on web platform
+                  </li>
+                )}
+              </ul>
+            </div>
+          )}
+        </section>
 
         {/* Contract Interaction (EVM & TRON) */}
         {isConnected && (

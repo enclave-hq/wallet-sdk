@@ -8,6 +8,7 @@ import { TronLinkAdapter } from '../adapters/tron/tronlink'
 import { EVMPrivateKeyAdapter } from '../adapters/evm/private-key'
 import { WalletConnectAdapter } from '../adapters/evm/wallet-connect'
 import { WalletConnectTronAdapter } from '../adapters/tron/wallet-connect'
+import { DeepLinkAdapter, DeepLinkProviderType } from '../adapters/deep-link/adapter'
 
 /**
  * Adapter Registry
@@ -42,6 +43,20 @@ export class AdapterRegistry {
 
     // Tron adapters
     this.register(WalletType.TRONLINK, () => new TronLinkAdapter())
+    
+    // Deep Link adapters (通用深度链接，与 WalletConnect 同级)
+    // 支持多链（EVM、TRON）和多个钱包提供者（TokenPocket、ImToken、TronLink等）
+    // 注意：Deep Link 主要用于签名操作，连接功能可能受限
+    this.register(WalletType.DEEP_LINK_EVM, () => 
+      new DeepLinkAdapter({
+        providerType: DeepLinkProviderType.TOKENPOCKET,
+      })
+    )
+    this.register(WalletType.DEEP_LINK_TRON, () => 
+      new DeepLinkAdapter({
+        providerType: DeepLinkProviderType.TOKENPOCKET,
+      })
+    )
   }
 
   /**
