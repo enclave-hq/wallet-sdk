@@ -41,7 +41,12 @@ export const CHAIN_INFO: Record<number, ChainInfo> = {
       symbol: 'ETH',
       decimals: 18,
     },
-    rpcUrls: ['https://eth.llamarpc.com'],
+    // 使用支持浏览器 CORS 的公共 RPC，避免 dapp 域名被跨域拦截（如 eth.llamarpc.com 无 CORS 头）
+    rpcUrls: [
+      'https://cloudflare-eth.com',
+      'https://rpc.ankr.com/eth',
+      'https://eth.llamarpc.com',
+    ],
     blockExplorerUrls: ['https://etherscan.io'],
   },
   

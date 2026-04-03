@@ -262,6 +262,71 @@ export class MetaMaskAdapter extends BrowserWalletAdapter {
   }
 
   /**
+   * 请求切换账户
+   * 弹出 MetaMask 账户选择界面，让用户选择或切换到目标地址
+   * @param targetAddress 目标地址（可选），如果提供，会在切换后验证是否匹配
+   * @returns 切换后的账户信息
+   */
+  async requestSwitchAccount(targetAddress?: string): Promise<Account> {
+    const provider = this.getBrowserProvider()
+    if (!provider) {
+      throw new Error('MetaMask provider not available')
+    }
+
+    try {
+      // 使用 wallet_requestPermissions 请求账户权限，会弹出账户选择界面
+      await provider.request({
+        method: 'wallet_requestPermissions',
+        params: [{ eth_accounts: {} }],
+      })
+
+      // 获取新选择的账户
+      const accounts = await provider.request({
+        method: 'eth_accounts',
+      })
+
+      if (!accounts || accounts.length === 0) {
+        throw new ConnectionRejectedError(this.type)
+      }
+
+      const address = formatEVMAddress(accounts[0])
+      
+      // 如果提供了目标地址，验证是否匹配
+      if (targetAddress && address.toLowerCase() !== targetAddress.toLowerCase()) {
+        throw new Error(`请在 MetaMask 中选择地址 ${targetAddress.slice(0, 6)}...${targetAddress.slice(-4)}，当前选择的是 ${address.slice(0, 6)}...${address.slice(-4)}`)
+      }
+
+      // 更新账户信息
+      const chainId = this.currentAccount?.chainId || 1
+      const account: Account = {
+        universalAddress: createUniversalAddress(chainId, address),
+        nativeAddress: address,
+        chainId,
+        chainType: ChainType.EVM,
+        isActive: true,
+      }
+      
+      this.setAccount(account)
+      this.emitAccountChanged(account)
+
+      // 更新 walletClient
+      const viemChain = this.getViemChain(chainId)
+      this.walletClient = createWalletClient({
+        account: address as `0x${string}`,
+        chain: viemChain,
+        transport: custom(provider),
+      })
+
+      return account
+    } catch (error: any) {
+      if (error.code === 4001) {
+        throw new ConnectionRejectedError(this.type)
+      }
+      throw error
+    }
+  }
+
+  /**
    * 读取合约
    */
   async readContract<T = any>(params: ContractReadParams): Promise<T> {

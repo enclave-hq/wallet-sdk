@@ -56,7 +56,6 @@ export { BrowserWalletAdapter } from './adapters/base/browser-wallet-adapter'
 export { MetaMaskAdapter } from './adapters/evm/metamask'
 export { WalletConnectAdapter } from './adapters/evm/wallet-connect'
 export { TronLinkAdapter } from './adapters/tron/tronlink'
-export { WalletConnectTronAdapter } from './adapters/tron/wallet-connect'
 export { EVMPrivateKeyAdapter } from './adapters/evm/private-key'
 // Deep Link (通用深度链接，与 WalletConnect 同级)
 export { DeepLinkAdapter, DeepLinkProviderType } from './adapters/deep-link/adapter'
@@ -88,6 +87,14 @@ export {
   getAddressFromUniversalAddress,
   compareUniversalAddresses,
 } from './utils/address/universal-address'
+
+// QR Code Signer
+export { QRCodeSigner } from './utils/qrcode-signer'
+export type {
+  QRCodeSignerConfig,
+  QRCodeSignResult,
+} from './utils/qrcode-signer'
+export { QRCodeSignStatus } from './utils/qrcode-signer'
 
 export {
   isValidEVMAddress,

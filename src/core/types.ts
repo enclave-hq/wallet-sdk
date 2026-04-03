@@ -125,6 +125,9 @@ export interface IWalletAdapter extends ISigner {
   switchChain?(chainId: number): Promise<void>
   addChain?(chainConfig: AddChainParams): Promise<void>
   
+  // 账户切换（弹出钱包账户选择界面）
+  requestSwitchAccount?(targetAddress?: string): Promise<Account>
+  
   // 合约调用
   readContract?<T = any>(params: ContractReadParams): Promise<T>
   writeContract?(params: ContractWriteParams): Promise<string>

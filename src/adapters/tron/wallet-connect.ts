@@ -408,6 +408,7 @@ export class WalletConnectTronAdapter extends WalletAdapter {
       } catch (error: any) {
         const errorMessage = error.message || String(error)
         const errorCode = error.code || error.error?.code
+        const origin = (typeof window !== 'undefined' && window.location) ? window.location.origin : ''
         
         // Extract more detailed error information
         let detailedError = errorMessage
@@ -439,6 +440,12 @@ export class WalletConnectTronAdapter extends WalletAdapter {
           errorMessage.includes('rejected') ||
           errorMessage.includes('拒绝') ||
           errorCode === 4001
+
+        // WalletConnect relay reject: origin not allowlisted for this projectId
+        const isOriginNotAllowed =
+          errorCode === 3000 ||
+          /origin not allowed/i.test(errorMessage) ||
+          /Unauthorized:\s*origin not allowed/i.test(errorMessage)
         
         // Get current metadata configuration for error reporting
         const currentMetadata = this.wallet ? {
@@ -570,6 +577,7 @@ export class WalletConnectTronAdapter extends WalletAdapter {
             `Configuration Details:\n` +
             `- Telegram Mini App: ${this.isTelegramMiniApp() ? 'Yes' : 'No'}\n` +
             `- Platform: ${errorDetails.telegramPlatform}\n` +
+            `- Origin: ${origin || '(unknown)'}\n` +
             `- Project ID: ${this.projectId ? 'Set' : 'Missing'}\n` +
             `- Network: ${network}\n` +
             `- Chain ID: ${targetChainId}\n\n` +
@@ -579,6 +587,22 @@ export class WalletConnectTronAdapter extends WalletAdapter {
             `3. Network/chainId mismatch\n` +
             `4. Domain not added to WalletConnect Cloud allowlist\n\n` +
             `Please check the console for detailed error information.`
+          )
+        }
+
+        // Handle WalletConnect Cloud origin allowlist errors with a very explicit action item
+        if (isOriginNotAllowed) {
+          throw new ConfigurationError(
+            `WalletConnect Tron relayer rejected this origin (code 3000: Unauthorized: origin not allowed).\n\n` +
+            `Fix:\n` +
+            `1) Open WalletConnect Cloud → your project (${this.projectId})\n` +
+            `2) Add this site origin to the allowlist:\n` +
+            `   - ${origin || '(unknown origin)'}\n\n` +
+            `Common dev origins to allow:\n` +
+            `- http://localhost:5173\n` +
+            `- http://192.168.0.221:5173 (your LAN dev URL)\n` +
+            `- https://wallet-test.enclave-hq.com (your Cloudflare Tunnel/custom domain)\n\n` +
+            `Original error: ${errorMessage}`
           )
         }
         

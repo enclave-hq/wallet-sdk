@@ -29,6 +29,10 @@
     "allowSyntheticDefaultImports": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "wallet-sdk-tron-loader": ["./src/internal/walletconnect-tron-loader.esm.ts"]
+    },
     "jsx": "react",
     "jsxFactory": "React.createElement",
     "jsxFragmentFactory": "React.Fragment"

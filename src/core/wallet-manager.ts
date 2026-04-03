@@ -22,6 +22,8 @@ import {
   WalletNotAvailableError,
 } from './errors'
 import { EVMPrivateKeyAdapter } from '../adapters/evm/private-key'
+import { QRCodeSigner } from '../utils/qrcode-signer'
+import type { QRCodeSignerConfig } from '../utils/qrcode-signer'
 
 /**
  * Wallet Manager
@@ -285,6 +287,44 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
   }
 
   /**
+   * Create QR code signer for message signing
+   * 
+   * This method creates a QR code signer that can be used to display a QR code
+   * for users to scan with their wallet app to sign a message.
+   * 
+   * @param message - Message to sign
+   * @param config - QR code signer configuration
+   * @returns QRCodeSigner instance
+   * 
+   * @example
+   * ```typescript
+   * const signer = walletManager.createQRCodeSigner('Hello World', {
+   *   requestId: 'sign-123',
+   *   requestUrl: 'https://example.com/sign?requestId=sign-123&message=Hello%20World',
+   *   pollUrl: 'https://api.example.com/sign/status',
+   * })
+   * 
+   * const qrCodeUrl = await signer.generateQRCode()
+   * const signature = await signer.startPolling()
+   * ```
+   */
+  createQRCodeSigner(
+    message: string,
+    config: Omit<QRCodeSignerConfig, 'requestId' | 'requestUrl'> & {
+      requestId: string
+      requestUrl: string
+    }
+  ): QRCodeSigner {
+    return new QRCodeSigner({
+      ...config,
+      // Encode message in request URL if not already encoded
+      requestUrl: config.requestUrl.includes(encodeURIComponent(message))
+        ? config.requestUrl
+        : `${config.requestUrl}${config.requestUrl.includes('?') ? '&' : '?'}message=${encodeURIComponent(message)}`,
+    })
+  }
+
+  /**
    * Sign TypedData (EVM only)
    */
   async signTypedData(typedData: any, chainType?: ChainType): Promise<string> {
@@ -367,6 +407,53 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
       }
       throw error
     }
+  }
+
+  /**
+   * Request account switch (opens wallet account selector)
+   * @param targetAddress Optional target address to verify after switching
+   * @returns The new account after switching
+   */
+  async requestSwitchAccount(targetAddress?: string): Promise<Account> {
+    if (!this.primaryWallet) {
+      throw new WalletNotConnectedError()
+    }
+
+    if (!this.primaryWallet.requestSwitchAccount) {
+      throw new Error(`Account switching not supported by ${this.primaryWallet.type}`)
+    }
+
+    const account = await this.primaryWallet.requestSwitchAccount(targetAddress)
+    
+    // Save to storage after account switch
+    if (this.config.enableStorage) {
+      this.saveToStorage()
+    }
+
+    return account
+  }
+
+  /**
+   * Ensure the current account matches the target address
+   * If not matching, request account switch
+   * @param targetAddress The address that should be active
+   * @returns The account (either existing or after switch)
+   */
+  async ensureAccount(targetAddress: string): Promise<Account> {
+    const currentAccount = this.getPrimaryAccount()
+    
+    if (!currentAccount) {
+      throw new WalletNotConnectedError()
+    }
+
+    // Check if current account matches target
+    if (currentAccount.nativeAddress.toLowerCase() === targetAddress.toLowerCase()) {
+      return currentAccount
+    }
+
+    // Need to switch account
+    console.log(`[WalletManager] Current account ${currentAccount.nativeAddress} doesn't match target ${targetAddress}, requesting switch...`)
+    return this.requestSwitchAccount(targetAddress)
   }
 
   // ===== Contract Calls =====

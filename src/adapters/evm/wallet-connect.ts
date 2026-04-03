@@ -734,6 +734,15 @@ export class WalletConnectAdapter extends WalletAdapter {
       this.setState(WalletState.ERROR)
       this.setAccount(null)
 
+      // WalletConnect relay reject: origin not allowlisted for this projectId
+      const origin = (typeof window !== 'undefined' && window.location) ? window.location.origin : ''
+      const errorCode = error?.code
+      const errorMessage = error?.message || String(error)
+      const isOriginNotAllowed =
+        errorCode === 3000 ||
+        /origin not allowed/i.test(errorMessage) ||
+        /Unauthorized:\s*origin not allowed/i.test(errorMessage)
+
       // Log the actual error for debugging
       const session = this.provider?.session as any
       const providerState = this.provider ? {
@@ -776,6 +785,21 @@ export class WalletConnectAdapter extends WalletAdapter {
             error.message.includes('User cancelled')
           ))) {
         throw new ConnectionRejectedError(this.type)
+      }
+
+      if (isOriginNotAllowed) {
+        throw new ConfigurationError(
+          `WalletConnect relayer rejected this origin (code 3000: Unauthorized: origin not allowed).\n\n` +
+          `Fix:\n` +
+          `1) Open WalletConnect Cloud → your project (${this.projectId})\n` +
+          `2) Add this site origin to the allowlist:\n` +
+          `   - ${origin || '(unknown origin)'}\n\n` +
+          `Common dev origins to allow:\n` +
+          `- http://localhost:5173\n` +
+          `- http://192.168.0.221:5173 (your LAN dev URL)\n` +
+          `- https://wallet-test.enclave-hq.com (your Cloudflare Tunnel/custom domain)\n\n` +
+          `Original error: ${errorMessage}`
+        )
       }
 
       // For other errors, re-throw with original error message

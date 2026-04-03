@@ -98,6 +98,52 @@ function YourApp() {
 }
 ```
 
+### QR Code Signing (扫码签名)
+
+```tsx
+import React, { useState } from 'react'
+import { useQRCodeSigner, QRCodeModal } from '@enclave-hq/wallet-sdk/react'
+
+function SignButton() {
+  const [showModal, setShowModal] = useState(false)
+  
+  const { qrCodeDataUrl, status, startSign, cancel, error } = useQRCodeSigner({
+    requestId: `sign-${Date.now()}`,
+    requestUrl: `https://example.com/sign?requestId=sign-${Date.now()}`,
+    pollUrl: 'https://api.example.com/sign/status',
+  })
+
+  const handleSign = async () => {
+    setShowModal(true)
+    try {
+      const signature = await startSign()
+      console.log('Signature:', signature)
+      setShowModal(false)
+    } catch (error) {
+      console.error('Sign failed:', error)
+    }
+  }
+
+  return (
+    <>
+      <button onClick={handleSign}>扫码签名</button>
+      
+      <QRCodeModal
+        isOpen={showModal}
+        onClose={() => {
+          cancel()
+          setShowModal(false)
+        }}
+        qrCodeDataUrl={qrCodeDataUrl}
+        status={status}
+        error={error}
+        title="使用钱包扫码签名"
+      />
+    </>
+  )
+}
+```
+
 ## 🎯 Core Concepts
 
 ### Universal Address
@@ -138,9 +184,11 @@ const wallets = walletManager.getConnectedWallets()
 |--------|------------|--------|
 | MetaMask | EVM | ✅ Supported |
 | TronLink | Tron | ✅ Supported |
-| WalletConnect | EVM | 🚧 Coming Soon |
+| WalletConnect | EVM | ✅ Supported |
+| WalletConnect Tron | Tron | ✅ Supported |
 | Coinbase Wallet | EVM | 🚧 Coming Soon |
 | Private Key | EVM/Tron | ✅ Dev Only |
+| QR Code Signing | EVM/Tron | ✅ Supported |
 
 ## 📖 Documentation
 
@@ -152,6 +200,8 @@ Full documentation is available in the `/docs` folder:
 - [Integration Guide](../docs/wallet-sdk/INTEGRATION.md)
 - [State Management](../docs/wallet-sdk/STATE_AND_ACCOUNT.md)
 - [Standards & Signing](../docs/wallet-sdk/STANDARDS.md)
+- [QR Code Signing](./docs/QR_CODE_SIGNING.md) - 二维码签名功能
+- [TRON Wallet Signing](./docs/TRON_WALLET_SIGNING.md) - TRON 钱包签名支持
 
 ## 🧪 Running the Example
 

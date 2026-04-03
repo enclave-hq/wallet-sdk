@@ -18,6 +18,82 @@ import {
 } from '../../core/types'
 import { createUniversalAddress } from '../../utils/address/universal-address'
 import { ConnectionRejectedError, SignatureRejectedError, TransactionFailedError } from '../../core/errors'
+import { encodeFunctionData } from 'viem'
+
+/**
+ * TRON API 速率限制器（针对 TronGrid）
+ * 确保每次请求之间至少间隔指定时间，避免 429 Too Many Requests
+ */
+class TronApiRateLimiter {
+  private lastCallTime = 0
+  private readonly minInterval: number
+
+  constructor(minIntervalMs: number = 600) {
+    this.minInterval = minIntervalMs
+  }
+
+  /**
+   * 等待直到可以进行下一次 API 调用
+   */
+  async waitForNextCall(): Promise<void> {
+    const now = Date.now()
+    const timeSinceLastCall = now - this.lastCallTime
+
+    if (timeSinceLastCall < this.minInterval) {
+      const waitTime = this.minInterval - timeSinceLastCall
+      await new Promise(resolve => setTimeout(resolve, waitTime))
+    }
+
+    this.lastCallTime = Date.now()
+  }
+}
+
+// 全局 TronGrid 限流：每次请求间隔至少 600ms（约 1.6 次/秒），避免 api.trongrid.io 返回 429
+const tronApiRateLimiter = new TronApiRateLimiter(600)
+
+/**
+ * 重试机制（带指数退避）
+ * 特别处理 429 (Too Many Requests) 错误
+ */
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  initialDelay: number = 500
+): Promise<T> {
+  let lastError: any
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn()
+    } catch (error: any) {
+      lastError = error
+      const errorMsg = error?.message || String(error)
+      const errorLower = errorMsg.toLowerCase()
+      
+      // 检查是否是 429 错误或速率限制错误
+      const isRateLimitError = 
+        error?.response?.status === 429 ||
+        error?.status === 429 ||
+        errorLower.includes('429') ||
+        errorLower.includes('rate limit') ||
+        errorLower.includes('too many requests') ||
+        error?.code === 'ERR_BAD_REQUEST' && error?.response?.status === 429
+      
+      if (isRateLimitError && attempt < maxRetries - 1) {
+        // 指数退避：延迟时间 = initialDelay * 2^attempt
+        const delay = initialDelay * Math.pow(2, attempt)
+        console.warn(`[TronLink] 遇到速率限制 (429)，等待 ${delay}ms 后重试 (${attempt + 1}/${maxRetries})...`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+        continue
+      }
+      
+      // 如果不是速率限制错误，或者重试次数已用完，直接抛出错误
+      throw error
+    }
+  }
+  
+  throw lastError
+}
 
 /**
  * TronWeb 兼容钱包适配器
@@ -225,54 +301,40 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
   /**
    * 读取合约
    * 参考 webserver 的实现，使用 TronWeb 合约实例的标准 call() 方法
+   * 带 TronGrid 限流 + 429 重试
    */
   async readContract<T = any>(params: ContractReadParams): Promise<T> {
     this.ensureConnected()
 
-    try {
+    await tronApiRateLimiter.waitForNextCall()
+
+    const doRead = async (): Promise<T> => {
       const tronWeb = this.getTronWeb()
-      
       if (!this.currentAccount) {
         throw new Error('No account connected')
       }
-      
-      // 方法1: 使用 TronWeb 标准方法（参考 webserver 的实现）
       try {
-        // 创建合约实例（使用 ABI）
         const contract = await tronWeb.contract(params.abi, params.address)
-        
-        // 获取方法
         const method = contract[params.functionName]
         if (!method || typeof method !== 'function') {
           throw new Error(`Function ${params.functionName} not found in contract ABI`)
         }
-        
-        // 直接调用 call() 方法（不需要传入地址参数）
-        // 这是 TronWeb 的标准只读调用方式
         const result = await method(...(params.args || [])).call()
-        
         return result as T
       } catch (method1Error: any) {
-        // 如果方法1失败，尝试方法2：不使用 ABI，直接使用合约地址
         console.warn('⚠️ [方法1] TronWeb标准方法失败，尝试方法2:', method1Error.message)
-        
-        try {
-          // 方法2: 不使用 ABI，直接使用合约地址（某些钱包可能不支持 ABI）
-          const contract2 = await (tronWeb as any).contract().at(params.address)
-          const method2 = contract2[params.functionName]
-          
-          if (!method2 || typeof method2 !== 'function') {
-            throw new Error(`Function ${params.functionName} not found in contract`)
-          }
-          
-          const result = await method2(...(params.args || [])).call()
-          return result as T
-        } catch (method2Error: any) {
-          console.error('⚠️ [方法2] 也失败:', method2Error.message)
-          // 如果两种方法都失败，抛出原始错误
-          throw method1Error
+        const contract2 = await (tronWeb as any).contract().at(params.address)
+        const method2 = contract2[params.functionName]
+        if (!method2 || typeof method2 !== 'function') {
+          throw new Error(`Function ${params.functionName} not found in contract`)
         }
+        const result = await method2(...(params.args || [])).call()
+        return result as T
       }
+    }
+
+    try {
+      return await retryWithBackoff(doRead, 3, 800)
     } catch (error: any) {
       console.error('Read contract error:', error)
       throw new Error(`Failed to read contract: ${error.message || 'Unknown error'}`)
@@ -284,6 +346,9 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
    */
   async writeContract(params: ContractWriteParams): Promise<string> {
     this.ensureConnected()
+
+    // 等待速率限制（每次 TRON API 调用之间至少间隔 0.2 秒，避免 429 错误）
+    await tronApiRateLimiter.waitForNextCall()
 
     try {
       const tronWeb = this.getTronWeb()
@@ -324,35 +389,219 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
       console.log('[TronLink] Calling with args:', params.args)
       
       // 准备交易参数
+      // TRON 链的 FeeLimit 固定为 100 TRX（100,000,000 SUN）
+      const TRON_FEE_LIMIT = 100_000_000 // 100 TRX = 100,000,000 SUN
       const options = {
-        feeLimit: params.gas || 100_000_000, // 默认 100 TRX 的能量限制
+        feeLimit: TRON_FEE_LIMIT, // 固定为 100 TRX 的能量限制
         callValue: params.value || 0, // 发送的 TRX 数量（单位：SUN）
       }
       
-      // 构建参数数组
-      const parameter = functionAbi.inputs.map((input: any, index: number) => ({
-        type: input.type,
-        value: params.args![index]
-      }))
+      // 检查是否有 tuple[] 类型的参数
+      const hasTupleArray = functionAbi.inputs.some((input: any) => input.type === 'tuple[]')
       
-      console.log('[TronLink] Transaction options:', options)
-      console.log('[TronLink] Parameters:', parameter)
+      console.log('[TronLink] 检查 tuple[] 类型:', {
+        hasTupleArray,
+        inputs: functionAbi.inputs.map((i: any) => ({ name: i.name, type: i.type })),
+      })
       
-      // 构建函数选择器（参考 webserver 的实现）
-      const functionSelector = params.functionName + '(' + functionAbi.inputs.map((i: any) => i.type).join(',') + ')'
+      let tx: any
       
-      console.log('[TronLink] Function selector:', functionSelector)
-      console.log('[TronLink] Transaction options:', options)
-      console.log('[TronLink] Parameters:', parameter)
-      
-      // 使用 triggerSmartContract 触发合约（参考 webserver 的实现）
-      const tx = await tronWeb.transactionBuilder.triggerSmartContract(
-        params.address,
-        functionSelector,
-        options,
-        parameter,
-        this.currentAccount!.nativeAddress
-      )
+      if (hasTupleArray) {
+        // 对于包含 tuple[] 的函数，使用 viem 手动编码参数，然后使用 TronWeb 的底层 API
+        console.log('[TronLink] 检测到 tuple[] 参数，使用手动编码方式')
+        
+        // 准备参数：将 TRON Base58 地址转换为 hex 格式（viem 需要）
+        const processedArgs = params.args!.map((argValue: any, index: number) => {
+          const input = functionAbi.inputs[index]
+          
+          // 处理 address 类型：转换为 hex 格式（viem 需要）
+          if (input.type === 'address' && typeof argValue === 'string') {
+            if (argValue.startsWith('T') && argValue.length === 34) {
+              // Base58 地址，转换为 hex
+              const hexAddress = tronWeb.address.toHex(argValue)
+              return hexAddress.startsWith('0x') ? hexAddress : `0x${hexAddress}`
+            }
+            return argValue.startsWith('0x') ? argValue : `0x${argValue}`
+          }
+          
+          // 处理 tuple[] 类型：保持原样（viem 会处理）
+          if (input.type === 'tuple[]' && Array.isArray(argValue)) {
+            return argValue.map((tupleItem: any) => {
+              if (input.components && Array.isArray(input.components)) {
+                const processedTuple: any = {}
+                input.components.forEach((component: any) => {
+                  let value = tupleItem[component.name]
+                  
+                  // 处理 tuple 中的 address 类型
+                  if (component.type === 'address' && typeof value === 'string') {
+                    if (value.startsWith('T') && value.length === 34) {
+                      const hexAddress = tronWeb.address.toHex(value)
+                      value = hexAddress.startsWith('0x') ? hexAddress : `0x${hexAddress}`
+                    } else if (!value.startsWith('0x')) {
+                      value = `0x${value}`
+                    }
+                  }
+                  
+                  processedTuple[component.name] = value
+                })
+                return processedTuple
+              }
+              return tupleItem
+            })
+          }
+          
+          // 处理 tuple 类型（单个 tuple）
+          if (input.type === 'tuple' && typeof argValue === 'object' && !Array.isArray(argValue)) {
+            if (input.components && Array.isArray(input.components)) {
+              const processedTuple: any = {}
+              input.components.forEach((component: any) => {
+                let value = argValue[component.name]
+                
+                // 处理 tuple 中的 address 类型
+                if (component.type === 'address' && typeof value === 'string') {
+                  if (value.startsWith('T') && value.length === 34) {
+                    const hexAddress = tronWeb.address.toHex(value)
+                    value = hexAddress.startsWith('0x') ? hexAddress : `0x${hexAddress}`
+                  } else if (!value.startsWith('0x')) {
+                    value = `0x${value}`
+                  }
+                }
+                
+                processedTuple[component.name] = value
+              })
+              return processedTuple
+            }
+          }
+          
+          return argValue
+        })
+        
+        console.log('[TronLink] 处理后的参数（用于 viem 编码）:', processedArgs)
+        
+        // 使用 viem 编码函数调用数据
+        const encodedData = encodeFunctionData({
+          abi: [functionAbi],
+          functionName: params.functionName,
+          args: processedArgs as any,
+        })
+        
+        console.log('[TronLink] 编码后的数据:', encodedData)
+        
+        // 提取函数选择器（前4字节）和参数数据
+        const functionSelector = encodedData.slice(0, 10) // 0x + 4 bytes = 10 chars
+        const parameterData = encodedData.slice(10) // 剩余的参数数据
+        
+        console.log('[TronLink] 函数选择器:', functionSelector)
+        console.log('[TronLink] 参数数据:', parameterData)
+        
+        // 构建函数签名（用于 TronWeb API）
+        const functionSignature = params.functionName + '(' + functionAbi.inputs.map((i: any) => i.type).join(',') + ')'
+        
+        // 移除 0x 前缀（TronWeb 的 rawParameter 期望的格式）
+        const parameterHexClean = parameterData.startsWith('0x') ? parameterData.slice(2) : parameterData
+        
+        // 使用 TronWeb 的 triggerSmartContract 方法，传递 rawParameter
+        // 这样可以避免直接调用 TronGrid API 导致的 CORS 问题
+        // TronWeb 会通过其内部机制处理 RPC 调用
+        console.log('[TronLink] 使用 TronWeb triggerSmartContract (rawParameter)...', {
+          contractAddress: params.address,
+          functionSelector: functionSignature,
+          encodedDataLength: parameterHexClean.length,
+        })
+        
+        // 添加重试机制（特别处理 429 错误）
+        tx = await retryWithBackoff(
+          () => tronWeb.transactionBuilder.triggerSmartContract(
+            params.address, // Base58 格式的合约地址
+            functionSignature, // 函数签名（用于识别函数）
+            {
+              feeLimit: options.feeLimit,
+              callValue: options.callValue,
+              rawParameter: parameterHexClean, // 使用 rawParameter 直接提供编码后的数据
+            },
+            [], // parameter 留空（因为使用 rawParameter）
+            this.currentAccount!.nativeAddress // Base58 格式的发送地址
+          ),
+          3, // 最多重试 3 次
+          500 // 初始延迟 500ms
+        )
+        
+        console.log('[TronLink] 使用 TronWeb API 构建的交易:', tx)
+      } else {
+        // 对于不包含 tuple[] 的函数，使用原来的方式
+        // 构建参数数组
+        const parameter = functionAbi.inputs.map((input: any, index: number) => {
+          const argValue = params.args![index]
+          
+          // 处理 tuple 类型（单个 tuple）
+          if (input.type === 'tuple' && typeof argValue === 'object' && !Array.isArray(argValue)) {
+            if (input.components && Array.isArray(input.components)) {
+              return {
+                type: input.type,
+                value: input.components.map((component: any) => ({
+                  type: component.type,
+                  value: argValue[component.name]
+                }))
+              }
+            }
+          }
+          
+          // 处理 address 类型：确保是 Base58 格式
+          if (input.type === 'address' && typeof argValue === 'string') {
+            // 如果已经是 Base58 格式（以 T 开头），直接使用
+            if (argValue.startsWith('T') && argValue.length === 34) {
+              return {
+                type: input.type,
+                value: argValue
+              }
+            }
+            // 如果是 hex 格式，转换为 Base58
+            try {
+              const base58Address = tronWeb.address.fromHex(argValue.startsWith('0x') ? argValue : `0x${argValue}`)
+              return {
+                type: input.type,
+                value: base58Address
+              }
+            } catch (e) {
+              // 转换失败，使用原始值
+              return {
+                type: input.type,
+                value: argValue
+              }
+            }
+          }
+          
+          // 其他类型直接返回
+          return {
+            type: input.type,
+            value: argValue
+          }
+        })
+        
+        console.log('[TronLink] Transaction options:', options)
+        console.log('[TronLink] Parameters:', parameter)
+        
+        // 构建函数选择器（参考 webserver 的实现）
+        const functionSelector = params.functionName + '(' + functionAbi.inputs.map((i: any) => i.type).join(',') + ')'
+        
+        console.log('[TronLink] Function selector:', functionSelector)
+        console.log('[TronLink] Transaction options:', options)
+        console.log('[TronLink] Parameters:', parameter)
+        
+        // 使用 triggerSmartContract 触发合约（参考 webserver 的实现）
+        // 添加重试机制（特别处理 429 错误）
+        tx = await retryWithBackoff(
+          () => tronWeb.transactionBuilder.triggerSmartContract(
+            params.address,
+            functionSelector,
+            options,
+            parameter,
+            this.currentAccount!.nativeAddress
+          ),
+          3, // 最多重试 3 次
+          500 // 初始延迟 500ms
+        )
+      }
       
       console.log('[TronLink] Transaction built:', tx)
       
@@ -411,6 +660,7 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
       
       while (attempts < maxAttempts) {
         try {
+          await tronApiRateLimiter.waitForNextCall()
           const txInfo = await tronWeb.trx.getTransactionInfo(txHash)
           
           if (txInfo && txInfo.id) {

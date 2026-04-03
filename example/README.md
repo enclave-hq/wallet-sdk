@@ -69,7 +69,7 @@ Create a `.env` file in the `example` directory:
 
 ```bash
 # Copy the example file
-cp .env.example .env
+cp env.example .env
 ```
 
 Then edit `.env` and replace `your-project-id-here` with your actual Project ID:
@@ -84,6 +84,16 @@ VITE_WALLETCONNECT_PROJECT_ID=1234567890abcdef1234567890abcdef
 - If you don't provide a Project ID, WalletConnect will **not appear** in the wallet list
 - For production, use your production project's Project ID
 - You can use the same Project ID for development and production, or create separate projects
+
+#### If you see `code 3000 (Unauthorized: origin not allowed)`
+
+This means your `VITE_WALLETCONNECT_PROJECT_ID` is valid, but **WalletConnect Cloud is rejecting the current website origin**.
+
+Fix it in WalletConnect Cloud:
+- Add your current site origin to the project allowlist, for example:
+  - `http://localhost:5173`
+  - `http://192.168.0.221:5173` (LAN dev URL)
+  - `https://wallet-test.enclave-hq.com` (Cloudflare Tunnel/custom domain)
 
 ### Start Development Server
 

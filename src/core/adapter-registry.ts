@@ -7,7 +7,7 @@ import { MetaMaskAdapter } from '../adapters/evm/metamask'
 import { TronLinkAdapter } from '../adapters/tron/tronlink'
 import { EVMPrivateKeyAdapter } from '../adapters/evm/private-key'
 import { WalletConnectAdapter } from '../adapters/evm/wallet-connect'
-import { WalletConnectTronAdapter } from '../adapters/tron/wallet-connect'
+import { loadWalletConnectTronModule } from 'wallet-sdk-tron-loader'
 import { DeepLinkAdapter, DeepLinkProviderType } from '../adapters/deep-link/adapter'
 
 /**
@@ -35,10 +35,11 @@ export class AdapterRegistry {
       this.register(WalletType.WALLETCONNECT, () => 
         new WalletConnectAdapter(this.config.walletConnectProjectId!)
       )
-      // Wallet Connect Tron adapter
-      this.register(WalletType.WALLETCONNECT_TRON, () => 
-        new WalletConnectTronAdapter(this.config.walletConnectProjectId!)
-      )
+      // Wallet Connect Tron adapter（CJS 下经 sibling tron.js 懒加载，避免 Node 顶层拉 @tronweb3/walletconnect-tron）
+      this.register(WalletType.WALLETCONNECT_TRON, () => {
+        const { WalletConnectTronAdapter } = loadWalletConnectTronModule()
+        return new WalletConnectTronAdapter(this.config.walletConnectProjectId!)
+      })
     }
 
     // Tron adapters
