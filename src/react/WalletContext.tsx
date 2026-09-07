@@ -37,12 +37,21 @@ const WalletContext = createContext<WalletContextValue | null>(null)
 export interface WalletProviderProps {
   children: ReactNode
   walletManager?: WalletManager
+  /**
+   * When true (default), restores a prior session from storage on mount (may call eth_accounts / adapters).
+   * Set false so the user must explicitly connect (e.g. KeyManager / backend-driven flows).
+   */
+  autoRestoreFromStorage?: boolean
 }
 
 /**
  * Wallet Provider
  */
-export function WalletProvider({ children, walletManager: externalWalletManager }: WalletProviderProps) {
+export function WalletProvider({
+  children,
+  walletManager: externalWalletManager,
+  autoRestoreFromStorage = true,
+}: WalletProviderProps) {
   const [walletManager] = useState(() => externalWalletManager || new WalletManager())
   const [account, setAccount] = useState<Account | null>(null)
   const [connectedWallets, setConnectedWallets] = useState<ConnectedWallet[]>([])
@@ -93,8 +102,13 @@ export function WalletProvider({ children, walletManager: externalWalletManager 
     return walletManager.signTransaction(transaction)
   }, [walletManager])
 
-  // Auto-restore connection (only on mount)
+  // Optional auto-restore from storage (only on mount)
   useEffect(() => {
+    if (!autoRestoreFromStorage) {
+      setIsRestoring(false)
+      return
+    }
+
     const restoreConnection = async () => {
       try {
         // Try to restore connection from storage
@@ -111,7 +125,7 @@ export function WalletProvider({ children, walletManager: externalWalletManager 
     }
 
     restoreConnection()
-  }, [walletManager, updateConnectedWallets])
+  }, [walletManager, updateConnectedWallets, autoRestoreFromStorage])
 
   // Listen to events
   useEffect(() => {

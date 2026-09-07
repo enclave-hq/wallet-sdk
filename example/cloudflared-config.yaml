@@ -1,0 +1,32 @@
+# CloudFlare Tunnel Configuration
+# 用于将本地开发服务暴露到公网
+# 
+# 使用方法（注意 --config 必须在 tunnel 和 run 之间）:
+#   cloudflared tunnel --config cloudflared-config.yaml run
+#
+# 或者将配置文件复制到默认位置后直接运行:
+#   cp cloudflared-config.yaml ~/.cloudflared/config.yml
+#   cloudflared tunnel run
+
+# 使用现有的 enclave tunnel
+tunnel: enclave
+# 或者使用 Tunnel ID
+# tunnel: c223fcaf-566d-4a28-a45a-0f503aeb6dfc
+
+# 凭证文件路径（已找到）
+credentials-file: /Users/qizhongzhu/.cloudflared/c223fcaf-566d-4a28-a45a-0f503aeb6dfc.json
+
+ingress:
+  # 本地开发服务器 (Vite)
+  - hostname: wallet-test.enclave-hq.com
+    service: http://localhost:5173
+    originRequest:
+      noHappyEyeballs: true
+      keepAliveConnections: 10
+      keepAliveTimeout: 90s
+      httpHostHeader: wallet-test.enclave-hq.com
+      originServerName: wallet-test.enclave-hq.com
+
+  # 默认规则 - 必须放在最后
+  - service: http_status:404
+

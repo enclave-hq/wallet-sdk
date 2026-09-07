@@ -24,6 +24,7 @@ import {
 import { EVMPrivateKeyAdapter } from '../adapters/evm/private-key'
 import { QRCodeSigner } from '../utils/qrcode-signer'
 import type { QRCodeSignerConfig } from '../utils/qrcode-signer'
+import { coerceWalletHexString } from '../utils/hex'
 
 /**
  * Wallet Manager
@@ -176,24 +177,37 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
   }
 
   /**
-   * Disconnect all wallets
+   * Disconnect all wallets.
+   * Always clear primary + pool even if an adapter throws (avoids sticky T…/iw9 Primary).
    */
   async disconnectAll(): Promise<void> {
     const wallets = Array.from(this.connectedWallets.values())
-
-    for (const wallet of wallets) {
-      await wallet.disconnect()
-      this.removeAdapterListeners(wallet)
+    const errors: unknown[] = []
+    try {
+      for (const wallet of wallets) {
+        try {
+          await wallet.disconnect()
+        } catch (err) {
+          errors.push(err)
+        }
+        try {
+          this.removeAdapterListeners(wallet)
+        } catch {
+          /* ignore listener cleanup */
+        }
+      }
+    } finally {
+      this.primaryWallet = null
+      this.connectedWallets.clear()
+      if (this.config.enableStorage) {
+        this.clearStorage()
+      }
+      this.emit('disconnected')
     }
-
-    this.primaryWallet = null
-    this.connectedWallets.clear()
-
-    if (this.config.enableStorage) {
-      this.clearStorage()
+    if (errors.length > 0) {
+      const first = errors[0]
+      throw first instanceof Error ? first : new Error(String(first))
     }
-
-    this.emit('disconnected')
   }
 
   // ===== Primary Wallet Management =====
@@ -267,7 +281,10 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
       throw new WalletNotConnectedError()
     }
 
-    return this.primaryWallet.signMessage(message)
+    return coerceWalletHexString(
+      await this.primaryWallet.signMessage(message),
+      'signature',
+    )
   }
 
   /**
@@ -283,7 +300,7 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
       throw new WalletNotConnectedError(`Wallet for chain type ${chainType}`)
     }
 
-    return adapter.signMessage(message)
+    return coerceWalletHexString(await adapter.signMessage(message), 'signature')
   }
 
   /**
@@ -340,7 +357,7 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
       throw new Error(`signTypedData not supported by ${adapter.type}`)
     }
 
-    return adapter.signTypedData(typedData)
+    return coerceWalletHexString(await adapter.signTypedData(typedData), 'signature')
   }
 
   /**
@@ -376,6 +393,44 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
     }
 
     return adapter.signTransaction(transaction)
+  }
+
+  /**
+   * Send transaction (with primary wallet)
+   */
+  async sendTransaction(transaction: any): Promise<string> {
+    if (!this.primaryWallet) {
+      throw new WalletNotConnectedError()
+    }
+
+    if (!this.primaryWallet.sendTransaction) {
+      throw new Error(`sendTransaction not supported by ${this.primaryWallet.type}`)
+    }
+
+    return coerceWalletHexString(
+      await this.primaryWallet.sendTransaction(transaction),
+      'txHash',
+    )
+  }
+
+  /**
+   * Send transaction with wallet of specified chain type
+   */
+  async sendTransactionWithChainType(transaction: any, chainType?: ChainType): Promise<string> {
+    if (!chainType) {
+      return this.sendTransaction(transaction)
+    }
+
+    const adapter = this.connectedWallets.get(chainType)
+    if (!adapter) {
+      throw new WalletNotConnectedError(`Wallet for chain type ${chainType}`)
+    }
+
+    if (!adapter.sendTransaction) {
+      throw new Error(`sendTransaction not supported by ${adapter.type}`)
+    }
+
+    return coerceWalletHexString(await adapter.sendTransaction(transaction), 'txHash')
   }
 
   // ===== Chain Switching =====
@@ -792,16 +847,27 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
       if (adapter.chainType === ChainType.TRON && data.primaryWalletType === WalletType.TRONLINK) {
         try {
           const tronWeb = (adapter as any).getTronWeb?.()
-          if (tronWeb && tronWeb.defaultAddress?.base58) {
-            // TronLink is authorized, connect directly
+          const liveAddress = tronWeb?.defaultAddress?.base58
+          if (liveAddress) {
+            const savedAddress = data.current.split(':')[1]
+            if (
+              savedAddress &&
+              savedAddress !== liveAddress &&
+              savedAddress.toLowerCase() !== liveAddress.toLowerCase()
+            ) {
+              console.debug(
+                '[WalletManager] TronLink live address differs from storage; using live:',
+                liveAddress,
+              )
+            }
             const account = await adapter.connect(data.primaryChainId)
-            
+
             // Set as primary wallet
             this.setPrimaryWallet(adapter)
             this.connectedWallets.set(adapter.chainType, adapter)
             this.setupAdapterListeners(adapter, true)
             this.emit('accountChanged', account)
-            
+
             return account
           }
         } catch (silentError) {
@@ -843,18 +909,15 @@ export class WalletManager extends TypedEventEmitter<WalletManagerEvents> {
         }
       }
 
-      // Try normal connection (may popup) - only for non-WalletConnect Tron wallets
-      const account = await adapter.connect(data.primaryChainId)
-
-      // Set as primary wallet
-      this.setPrimaryWallet(adapter)
-      this.connectedWallets.set(adapter.chainType, adapter)
-      this.setupAdapterListeners(adapter, true)
-
-      // Don't save to storage here again to avoid loop
-      this.emit('accountChanged', account)
-
-      return account
+      // Do not call adapter.connect() here: that triggers permission popups (e.g. TronLink
+      // tron_requestAccounts / MetaMask eth_requestAccounts) during background "restore".
+      // Restore is silent-only; explicit user action must call connect().
+      console.debug(
+        '[WalletManager] restoreFromStorage: no silent session; skipping interactive connect (type:',
+        data.primaryWalletType,
+        ')'
+      )
+      return null
     } catch (error) {
       // Silently handle errors, might be user rejection or wallet unavailable
       console.debug('Failed to restore wallet from storage:', error)
