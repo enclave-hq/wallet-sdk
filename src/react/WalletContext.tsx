@@ -21,9 +21,12 @@ export interface WalletContextValue {
   connect: (type: WalletType, chainId?: number | number[]) => Promise<Account>
   connectAdditional: (type: WalletType, chainId?: number | number[]) => Promise<Account>
   disconnect: () => Promise<void>
+  /** Drop every connected family (EVM + TRON). Prefer over disconnect() for header logout. */
+  disconnectAll: () => Promise<void>
   switchPrimaryWallet: (chainType: ChainType) => Promise<Account>
   signMessage: (message: string) => Promise<string>
   signTransaction: (transaction: any) => Promise<string>
+  sendTransaction: (transaction: any) => Promise<string>
 }
 
 /**
@@ -84,6 +87,13 @@ export function WalletProvider({
     updateConnectedWallets()
   }, [walletManager, updateConnectedWallets])
 
+  // Disconnect every family (MetaMask + TronLink, etc.)
+  const disconnectAll = useCallback(async () => {
+    await walletManager.disconnectAll()
+    setAccount(null)
+    updateConnectedWallets()
+  }, [walletManager, updateConnectedWallets])
+
   // Switch primary wallet
   const switchPrimaryWallet = useCallback(async (chainType: ChainType) => {
     const account = await walletManager.switchPrimaryWallet(chainType)
@@ -100,6 +110,11 @@ export function WalletProvider({
   // Sign transaction
   const signTransaction = useCallback(async (transaction: any) => {
     return walletManager.signTransaction(transaction)
+  }, [walletManager])
+
+  // Send transaction
+  const sendTransaction = useCallback(async (transaction: any) => {
+    return walletManager.sendTransaction(transaction)
   }, [walletManager])
 
   // Optional auto-restore from storage (only on mount)
@@ -149,10 +164,22 @@ export function WalletProvider({
       updateConnectedWallets()
     }
 
+    // Additional (non-primary) wallets e.g. TronLink while EVM is primary —
+    // accountChanged only fires for primary; refresh list on any wallet account change.
+    const handleWalletAccountChanged = () => {
+      updateConnectedWallets()
+    }
+
+    const handleWalletDisconnected = () => {
+      updateConnectedWallets()
+    }
+
     walletManager.on('accountChanged', handleAccountChanged)
     walletManager.on('chainChanged', handleChainChanged)
     walletManager.on('disconnected', handleDisconnected)
     walletManager.on('primaryWalletSwitched', handlePrimaryWalletSwitched)
+    walletManager.on('walletAccountChanged', handleWalletAccountChanged)
+    walletManager.on('walletDisconnected', handleWalletDisconnected)
 
     // Initialize account (if already connected)
     if (!isRestoring) {
@@ -168,6 +195,8 @@ export function WalletProvider({
       walletManager.off('chainChanged', handleChainChanged)
       walletManager.off('disconnected', handleDisconnected)
       walletManager.off('primaryWalletSwitched', handlePrimaryWalletSwitched)
+      walletManager.off('walletAccountChanged', handleWalletAccountChanged)
+      walletManager.off('walletDisconnected', handleWalletDisconnected)
     }
   }, [walletManager, updateConnectedWallets, isRestoring])
 
@@ -180,9 +209,11 @@ export function WalletProvider({
     connect,
     connectAdditional,
     disconnect,
+    disconnectAll,
     switchPrimaryWallet,
     signMessage,
     signTransaction,
+    sendTransaction,
   }
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>

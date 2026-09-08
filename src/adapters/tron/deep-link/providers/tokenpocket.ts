@@ -5,7 +5,7 @@
  * 参考文档: https://help.tokenpocket.pro/developer-en/wallet/pull-up-wallet-with-deeplink
  */
 
-import { IDeepLinkProvider, DeepLinkSignMessageParams, DeepLinkSignTransactionParams, DeepLinkConnectParams } from './base'
+import type { IDeepLinkProvider, DeepLinkSignMessageParams, DeepLinkSignTransactionParams, DeepLinkConnectParams } from './base'
 
 export class TokenPocketDeepLinkProvider implements IDeepLinkProvider {
   readonly name = 'TokenPocket'

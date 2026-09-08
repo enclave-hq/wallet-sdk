@@ -17,7 +17,8 @@ import {
 import { createUniversalAddress } from '../../utils/address/universal-address'
 import { formatEVMAddress } from '../../utils/address/evm-utils'
 import { ConnectionRejectedError, SignatureRejectedError, TransactionFailedError } from '../../core/errors'
-import { getChainInfo } from '../../utils/chain-info'
+import { getChainInfo, getChainInfoBySlip44Id, normalizeToEvmChainId, normalizeToSlip44 } from '../../utils/chain-info'
+import { evmPersonalSignParams, toEip1193Quantity } from '../../utils/hex'
 
 /**
  * MetaMask Adapter
@@ -59,15 +60,21 @@ export class MetaMaskAdapter extends BrowserWalletAdapter {
         method: 'eth_chainId',
       })
       const parsedChainId = parseInt(currentChainId, 16)
+      const targetSlip44 =
+        targetChainId != null ? normalizeToSlip44(targetChainId) : null
+      const parsedSlip44 = normalizeToSlip44(parsedChainId)
 
-      // If chain ID is specified and doesn't match, try to switch
-      // For MetaMask, use first chain ID if array is provided
-      if (targetChainId && targetChainId !== parsedChainId) {
-        await this.switchChain(targetChainId)
+      // If chain ID is specified and doesn't match, try to switch (SLIP-44 in app, EVM in wallet)
+      if (targetSlip44 != null) {
+        const targetEvm = normalizeToEvmChainId(targetSlip44)
+        if (targetEvm != null && targetEvm !== parsedChainId) {
+          await this.switchChain(targetSlip44)
+        }
       }
 
-      const finalChainId = targetChainId || parsedChainId
-      const viemChain = this.getViemChain(finalChainId) as any
+      const finalSlip44 = targetSlip44 ?? parsedSlip44
+      const finalEvm = normalizeToEvmChainId(finalSlip44)
+      const viemChain = this.getViemChain(finalSlip44) as any
 
       // Create clients (need to specify chain to support writeContract)
       this.walletClient = createWalletClient({
@@ -77,7 +84,7 @@ export class MetaMaskAdapter extends BrowserWalletAdapter {
       })
 
       // Use our configured RPC nodes for read operations to avoid MetaMask internal RPC issues
-      const chainInfo = getChainInfo(finalChainId)
+      const chainInfo = getChainInfo(finalEvm)
       const primaryRpcUrl = chainInfo?.rpcUrls[0] // Use first (most reliable) RPC node
       
       this.publicClient = createPublicClient({
@@ -88,9 +95,9 @@ export class MetaMaskAdapter extends BrowserWalletAdapter {
       // 创建账户信息
       const address = formatEVMAddress(accounts[0])
       const account: Account = {
-        universalAddress: createUniversalAddress(finalChainId, address),
+        universalAddress: createUniversalAddress(finalSlip44, address),
         nativeAddress: address,
-        chainId: finalChainId,
+        chainId: finalSlip44,
         chainType: ChainType.EVM,
         isActive: true,
       }
@@ -122,7 +129,7 @@ export class MetaMaskAdapter extends BrowserWalletAdapter {
       const provider = this.getBrowserProvider()
       const signature = await provider.request({
         method: 'personal_sign',
-        params: [message, this.currentAccount!.nativeAddress],
+        params: evmPersonalSignParams(message, this.currentAccount!.nativeAddress),
       })
 
       return signature
@@ -172,12 +179,15 @@ export class MetaMaskAdapter extends BrowserWalletAdapter {
       const tx = {
         from: this.currentAccount!.nativeAddress,
         to: transaction.to,
-        value: transaction.value ? `0x${BigInt(transaction.value).toString(16)}` : undefined,
+        value: toEip1193Quantity(transaction.value),
         data: transaction.data || '0x',
-        gas: transaction.gas ? `0x${BigInt(transaction.gas).toString(16)}` : undefined,
-        gasPrice: transaction.gasPrice && transaction.gasPrice !== 'auto' ? `0x${BigInt(transaction.gasPrice).toString(16)}` : undefined,
-        maxFeePerGas: transaction.maxFeePerGas ? `0x${BigInt(transaction.maxFeePerGas).toString(16)}` : undefined,
-        maxPriorityFeePerGas: transaction.maxPriorityFeePerGas ? `0x${BigInt(transaction.maxPriorityFeePerGas).toString(16)}` : undefined,
+        gas: toEip1193Quantity(transaction.gas),
+        gasPrice:
+          transaction.gasPrice && transaction.gasPrice !== 'auto'
+            ? toEip1193Quantity(transaction.gasPrice)
+            : undefined,
+        maxFeePerGas: toEip1193Quantity(transaction.maxFeePerGas),
+        maxPriorityFeePerGas: toEip1193Quantity(transaction.maxPriorityFeePerGas),
         nonce: transaction.nonce !== undefined ? `0x${transaction.nonce.toString(16)}` : undefined,
         chainId: transaction.chainId || this.currentAccount!.chainId,
       }
@@ -198,32 +208,76 @@ export class MetaMaskAdapter extends BrowserWalletAdapter {
   }
 
   /**
+   * 发送交易（通过钱包广播）
+   */
+  async sendTransaction(transaction: any): Promise<string> {
+    this.ensureConnected()
+
+    try {
+      const provider = this.getBrowserProvider()
+
+      const tx = {
+        from: this.currentAccount!.nativeAddress,
+        to: transaction.to,
+        value: toEip1193Quantity(transaction.value),
+        data: transaction.data || '0x',
+        gas: toEip1193Quantity(transaction.gas),
+        gasPrice:
+          transaction.gasPrice && transaction.gasPrice !== 'auto'
+            ? toEip1193Quantity(transaction.gasPrice)
+            : undefined,
+        maxFeePerGas: toEip1193Quantity(transaction.maxFeePerGas),
+        maxPriorityFeePerGas: toEip1193Quantity(transaction.maxPriorityFeePerGas),
+        nonce: transaction.nonce !== undefined ? `0x${transaction.nonce.toString(16)}` : undefined,
+        chainId: `0x${normalizeToEvmChainId(transaction.chainId ?? this.currentAccount!.chainId).toString(16)}`,
+      }
+
+      const hash = await provider.request({
+        method: 'eth_sendTransaction',
+        params: [tx],
+      })
+
+      return hash as string
+    } catch (error: any) {
+      if (error.code === 4001) {
+        throw new SignatureRejectedError('Transaction was rejected by user')
+      }
+      throw error
+    }
+  }
+
+  /**
    * 切换链
    */
   async switchChain(chainId: number): Promise<void> {
     // 在连接过程中允许切换链，不需要检查连接状态
     const provider = this.getBrowserProvider()
+    // Known EIP-155 ids (97 testnet, 56 mainnet) must not collapse via SLIP-44 714 → 56.
+    const evmChainId = getChainInfo(chainId)
+      ? chainId
+      : normalizeToEvmChainId(normalizeToSlip44(chainId))
+    const slip44Id = normalizeToSlip44(evmChainId)
+    const chainInfo = getChainInfo(evmChainId) ?? getChainInfoBySlip44Id(slip44Id)
 
     try {
       await provider.request({
         method: 'wallet_switchEthereumChain',
-        params: [{ chainId: `0x${chainId.toString(16)}` }],
+        params: [{ chainId: `0x${evmChainId.toString(16)}` }],
       })
 
-      // 更新账户信息
+      // 更新账户信息（Enclave 侧统一用 SLIP-44）
       if (this.currentAccount) {
         const updatedAccount: Account = {
           ...this.currentAccount,
-          chainId,
-          universalAddress: createUniversalAddress(chainId, this.currentAccount.nativeAddress),
+          chainId: slip44Id,
+          universalAddress: createUniversalAddress(slip44Id, this.currentAccount.nativeAddress),
         }
         this.setAccount(updatedAccount)
-        this.emitChainChanged(chainId)
+        this.emitChainChanged(slip44Id)
       }
     } catch (error: any) {
       // 链不存在，尝试添加
       if (error.code === 4902) {
-        const chainInfo = getChainInfo(chainId)
         if (chainInfo) {
           await this.addChain({
             chainId: chainInfo.id,
@@ -233,9 +287,9 @@ export class MetaMaskAdapter extends BrowserWalletAdapter {
             blockExplorerUrls: chainInfo.blockExplorerUrls,
           })
           // 添加成功后再次尝试切换
-          await this.switchChain(chainId)
+          await this.switchChain(slip44Id)
         } else {
-          throw new Error(`Chain ${chainId} not supported`)
+          throw new Error(`Chain ${slip44Id} (EVM ${evmChainId}) not supported`)
         }
       } else {
         throw error
@@ -602,16 +656,17 @@ export class MetaMaskAdapter extends BrowserWalletAdapter {
    * 处理链变化
    */
   private handleChainChanged = (chainIdHex: string) => {
-    const chainId = parseInt(chainIdHex, 16)
+    const evmChainId = parseInt(chainIdHex, 16)
+    const slip44Id = normalizeToSlip44(evmChainId)
 
     if (this.currentAccount) {
       const account: Account = {
         ...this.currentAccount,
-        chainId,
-        universalAddress: createUniversalAddress(chainId, this.currentAccount.nativeAddress),
+        chainId: slip44Id,
+        universalAddress: createUniversalAddress(slip44Id, this.currentAccount.nativeAddress),
       }
       this.setAccount(account)
-      this.emitChainChanged(chainId)
+      this.emitChainChanged(slip44Id)
     }
   }
 
@@ -628,10 +683,11 @@ export class MetaMaskAdapter extends BrowserWalletAdapter {
    * 获取 viem chain 配置（简化版）
    */
   private getViemChain(chainId: number): any {
-    const chainInfo = getChainInfo(chainId)
+    const evmChainId = normalizeToEvmChainId(normalizeToSlip44(chainId))
+    const chainInfo = getChainInfo(evmChainId)
     if (chainInfo) {
       return {
-        id: chainId,
+        id: evmChainId,
         name: chainInfo.name,
         network: chainInfo.name.toLowerCase().replace(/\s+/g, '-'),
         nativeCurrency: chainInfo.nativeCurrency,
@@ -647,9 +703,9 @@ export class MetaMaskAdapter extends BrowserWalletAdapter {
 
     // 默认配置
     return {
-      id: chainId,
-      name: `Chain ${chainId}`,
-      network: `chain-${chainId}`,
+      id: evmChainId,
+      name: `Chain ${evmChainId}`,
+      network: `chain-${evmChainId}`,
       nativeCurrency: {
         name: 'ETH',
         symbol: 'ETH',

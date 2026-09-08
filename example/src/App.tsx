@@ -139,13 +139,17 @@ function App() {
   // Get block explorer URL based on chain
   const getBlockExplorerUrl = (txHash: string, currentChainId: number, currentChainType: string): { url: string; name: string } => {
     if (currentChainType === ChainType.TRON) {
-      // Tron chains
+      const tid = (() => {
+        const t = txHash.trim()
+        return t.startsWith('0x') || t.startsWith('0X') ? t.slice(2) : t
+      })()
+      // Tron chains（TronScan tx 路径要求 64 位 hex，无 0x）
       if (currentChainId === 195) {
-        return { url: `https://tronscan.org/#/transaction/${txHash}`, name: 'Tronscan' }
+        return { url: `https://tronscan.org/#/transaction/${tid}`, name: 'Tronscan' }
       } else if (currentChainId === 2494104990) {
-        return { url: `https://nile.tronscan.org/#/transaction/${txHash}`, name: 'Tronscan (Nile)' }
+        return { url: `https://nile.tronscan.org/#/transaction/${tid}`, name: 'Tronscan (Nile)' }
       }
-      return { url: `https://tronscan.org/#/transaction/${txHash}`, name: 'Tronscan' }
+      return { url: `https://tronscan.org/#/transaction/${tid}`, name: 'Tronscan' }
     }
 
     // EVM chains

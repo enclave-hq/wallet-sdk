@@ -56,10 +56,28 @@ export { BrowserWalletAdapter } from './adapters/base/browser-wallet-adapter'
 export { MetaMaskAdapter } from './adapters/evm/metamask'
 export { WalletConnectAdapter } from './adapters/evm/wallet-connect'
 export { TronLinkAdapter } from './adapters/tron/tronlink'
+export {
+  scheduleRpc,
+  throttleTronWeb,
+  rpcGate,
+  tronRpcGate,
+} from './adapters/tron/rpc-gate'
+export {
+  detectTronLinkInjector,
+  publishAfterTronLinkSign,
+  skipWalletBroadcastAfterSign,
+  tronTxLooksOnChain,
+} from './adapters/tron/tron-broadcast'
 export { EVMPrivateKeyAdapter } from './adapters/evm/private-key'
 // Deep Link (通用深度链接，与 WalletConnect 同级)
 export { DeepLinkAdapter, DeepLinkProviderType } from './adapters/deep-link/adapter'
-export { IDeepLinkProvider } from './adapters/deep-link/providers/base'
+export type { IDeepLinkProvider } from './adapters/deep-link/providers/base'
+export type {
+  DeepLinkCallback,
+  DeepLinkSignMessageParams,
+  DeepLinkSignTransactionParams,
+  DeepLinkConnectParams,
+} from './adapters/deep-link/providers/base'
 export { TokenPocketDeepLinkProvider } from './adapters/deep-link/providers/tokenpocket'
 export { TronLinkDeepLinkProvider } from './adapters/deep-link/providers/tronlink'
 export { ImTokenDeepLinkProvider } from './adapters/deep-link/providers/imtoken'
@@ -112,13 +130,28 @@ export {
 
 export {
   CHAIN_INFO,
+  EVM_CHAIN_ID,
+  SLIP44_CHAIN_ID,
   getChainInfo,
+  getChainInfoBySlip44Id,
   getChainType,
   isEVMChain,
   isTronChain,
+  isKnownEvmChain,
+  getSlip44,
+  getNativeChainId,
+  evmChainIdToSlip44,
+  slip44ToEvmChainId,
+  normalizeToSlip44,
+  normalizeToEvmChainId,
+  slip44FromEvmChainId,
+  evmChainIdFromCustomSlip44,
+  getAllChains,
 } from './utils/chain-info'
 
 export type { ChainInfo } from './utils/chain-info'
+
+export { nativeToSlip44, slip44ToNative } from '@enclave-hq/chain-utils'
 
 export {
   validateAddress,
@@ -133,9 +166,15 @@ export {
   toHex,
   fromHex,
   numberToHex,
+  toEip1193Quantity,
+  coerceWalletHexString,
+  asNonEmptyTrimmedString,
+  utf8ToPersonalSignHex,
+  evmPersonalSignParams,
   hexToNumber,
   ensureHexPrefix,
   removeHexPrefix,
+  humanizeTronWireMessage,
 } from './utils/hex'
 
 // ===== Default Export =====

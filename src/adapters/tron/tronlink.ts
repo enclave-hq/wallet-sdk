@@ -19,37 +19,21 @@ import {
 import { createUniversalAddress } from '../../utils/address/universal-address'
 import { ConnectionRejectedError, SignatureRejectedError, TransactionFailedError } from '../../core/errors'
 import { encodeFunctionData } from 'viem'
-
-/**
- * TRON API 速率限制器（针对 TronGrid）
- * 确保每次请求之间至少间隔指定时间，避免 429 Too Many Requests
- */
-class TronApiRateLimiter {
-  private lastCallTime = 0
-  private readonly minInterval: number
-
-  constructor(minIntervalMs: number = 600) {
-    this.minInterval = minIntervalMs
-  }
-
-  /**
-   * 等待直到可以进行下一次 API 调用
-   */
-  async waitForNextCall(): Promise<void> {
-    const now = Date.now()
-    const timeSinceLastCall = now - this.lastCallTime
-
-    if (timeSinceLastCall < this.minInterval) {
-      const waitTime = this.minInterval - timeSinceLastCall
-      await new Promise(resolve => setTimeout(resolve, waitTime))
-    }
-
-    this.lastCallTime = Date.now()
-  }
-}
-
-// 全局 TronGrid 限流：每次请求间隔至少 600ms（约 1.6 次/秒），避免 api.trongrid.io 返回 429
-const tronApiRateLimiter = new TronApiRateLimiter(600)
+import { resolveTronAccountsChangedAddress } from './tron-accounts-changed'
+import { isRateLimitError, throttleTronWeb } from './rpc-gate'
+import { detectTronLinkInjector, publishAfterTronLinkSign } from './tron-broadcast'
+import { walletErrorMessageFromEnvelope, asNonEmptyTrimmedString } from '../../utils/hex'
+import { tronInfoFailed, tronInfoLooksReady } from './tron-receipt'
+import { coerceWalletHexString } from '../../utils/hex'
+import {
+  extendUnsignedTronTxExpiration,
+  isTronTransactionExpiredError,
+} from './tron-tx-build'
+import {
+  interpretTronAuthorizeResult,
+  isThenable,
+  withTimeout,
+} from './tron-authorize'
 
 /**
  * 重试机制（带指数退避）
@@ -95,6 +79,51 @@ async function retryWithBackoff<T>(
   throw lastError
 }
 
+const TRON_CALLDATA_SELECTORS: Record<string, string> = {
+  '095ea7b3': 'approve(address,uint256)',
+  f50efe38: 'depositWithIntent(string,uint256,bytes32)',
+  '67802632': 'deposit(string,uint256,bytes32)',
+  '9f629052': 'depositAndSend(string,uint256,bytes32,bytes32,uint128)',
+  '594fcde9': 'depositWithIntentAndSend(string,uint256,bytes32,bytes32,uint128)',
+}
+
+function callValueSun(value: unknown): number {
+  if (value == null || value === '' || value === '0x' || value === '0x0') return 0
+  const n = typeof value === 'bigint' ? value : BigInt(String(value))
+  if (n < 0n || n > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error('TRON callValue out of safe integer range')
+  }
+  return Number(n)
+}
+
+function toTriggerContractBase58(tronWeb: any, raw: string): string {
+  let s = raw.trim()
+  const { toHex, fromHex } = tronWeb.address ?? {}
+  if (typeof toHex !== 'function' || typeof fromHex !== 'function') {
+    throw new Error('TronWeb.address.toHex / fromHex unavailable')
+  }
+  if (/^0x41[0-9a-fA-F]{40}$/.test(s)) s = s.slice(2)
+  return fromHex(toHex(s))
+}
+
+function tronTriggerModeFromCalldata(data: string): {
+  kind: 'rawParameter' | 'input'
+  functionSelector?: string
+  rawParameter?: string
+  input?: string
+} {
+  const hex = data.trim().replace(/^0x/i, '').toLowerCase()
+  if (hex.length < 8) {
+    return { kind: 'input', input: data.startsWith('0x') ? data : `0x${hex}` }
+  }
+  const selector = hex.slice(0, 8)
+  const named = TRON_CALLDATA_SELECTORS[selector]
+  if (named) {
+    return { kind: 'rawParameter', functionSelector: named, rawParameter: hex.slice(8) }
+  }
+  return { kind: 'input', input: `0x${hex}` }
+}
+
 /**
  * TronWeb 兼容钱包适配器
  * 支持所有提供 window.tronWeb 或 window.tronLink.tronWeb 接口的钱包
@@ -113,94 +142,47 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
    */
   async connect(chainId?: number | number[]): Promise<Account> {
     await this.ensureAvailable()
-    
-    // For TronLink, use first chain ID if array is provided
+
     const targetChainId = Array.isArray(chainId) ? chainId[0] : chainId
 
     try {
       this.setState(WalletState.CONNECTING)
 
       const w = window as any
-      const tronWeb = this.getTronWeb()
+      let tronWeb = this.getTronWeb()
 
-      // 等待 TronWeb 就绪（如果支持 ready 属性）
-      if (tronWeb.ready) {
-        await tronWeb.ready
+      // ready is often a boolean — only await real thenables (never hang on `true`).
+      if (isThenable(tronWeb.ready)) {
+        await withTimeout(Promise.resolve(tronWeb.ready), 5_000, 'TronWeb.ready').catch((err) => {
+          console.warn('[TronLink] ready wait skipped', err)
+        })
       }
 
-      // 先检查是否已经有地址（已授权），避免不必要的连接请求
-      let address = tronWeb.defaultAddress?.base58
-      
-      // 如果还没有地址，尝试从 hex 地址转换（某些钱包可能只提供 hex）
-      if (!address && tronWeb.defaultAddress?.hex && tronWeb.address && typeof tronWeb.address.fromHex === 'function') {
-        try {
-          address = tronWeb.address.fromHex(tronWeb.defaultAddress.hex)
-        } catch (e) {
-          // 转换失败，继续尝试其他方式
-        }
-      }
+      let address = this.readTronAddress(tronWeb)
 
-      // 如果仍然没有地址，等待一小段时间让钱包初始化
       if (!address) {
-        // 某些钱包需要时间初始化，等待最多 2 秒
         for (let i = 0; i < 20; i++) {
-          await new Promise(resolve => setTimeout(resolve, 100))
-          address = tronWeb.defaultAddress?.base58
+          await new Promise((resolve) => setTimeout(resolve, 100))
+          address = this.readTronAddress(tronWeb)
           if (address) break
         }
       }
 
-      // 只有在没有地址时才请求连接
       if (!address) {
-        // 优先使用 TronLink 特定的 request API（如果存在）
-        if (w.tronLink && typeof w.tronLink.request === 'function') {
-          try {
-            const result = await w.tronLink.request({
-              method: 'tron_requestAccounts',
-            })
-
-            if (!result || result.code !== 200) {
-              throw new ConnectionRejectedError(this.type)
-            }
-          } catch (error: any) {
-            // 如果用户拒绝连接
-            if (error.code === 4001 || error.message?.includes('User rejected') || error.message?.includes('rejected')) {
-              throw new ConnectionRejectedError(this.type)
-            }
-            // 其他错误继续，尝试直接获取地址
-          }
-        }
-
-        // 请求连接后，再次尝试获取地址
-        address = tronWeb.defaultAddress?.base58
-        
-        // 如果还没有地址，尝试从 hex 地址转换
-        if (!address && tronWeb.defaultAddress?.hex && tronWeb.address && typeof tronWeb.address.fromHex === 'function') {
-          try {
-            address = tronWeb.address.fromHex(tronWeb.defaultAddress.hex)
-          } catch (e) {
-            // 转换失败
-          }
-        }
-
-        // 如果仍然没有地址，等待一小段时间让钱包初始化
-        if (!address) {
-          for (let i = 0; i < 20; i++) {
-            await new Promise(resolve => setTimeout(resolve, 100))
-            address = tronWeb.defaultAddress?.base58
-            if (address) break
-          }
-        }
+        await this.requestTronAuthorization(w)
+        // After TIP-1102 auth, usable tronWeb may appear on window.tron.tronWeb.
+        tronWeb = this.getTronWeb()
+        address = await this.pollTronAddress(tronWeb, 60)
       }
 
       if (!address) {
-        throw new Error('Failed to get Tron address. Please make sure your wallet is unlocked and try again.')
+        throw new Error(
+          'Failed to get Tron address. Unlock TronLink, approve this site, and try again.',
+        )
       }
 
-      // Tron 主网的链 ID (use targetChainId which is already extracted from chainId)
       const tronChainId = targetChainId || TronLinkAdapter.TRON_MAINNET_CHAIN_ID
 
-      // 创建账户信息
       const account: Account = {
         universalAddress: createUniversalAddress(tronChainId, address),
         nativeAddress: address,
@@ -218,12 +200,102 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
       this.setState(WalletState.ERROR)
       this.setAccount(null)
 
-      if (error.code === 4001 || error.message?.includes('User rejected')) {
-        throw new ConnectionRejectedError(this.type)
+      if (
+        error instanceof ConnectionRejectedError ||
+        error?.code === 4001 ||
+        /user rejected|rejected by user/i.test(String(error?.message ?? ''))
+      ) {
+        throw error instanceof ConnectionRejectedError
+          ? error
+          : new ConnectionRejectedError(this.type)
       }
 
       throw error
     }
+  }
+
+  private readTronAddress(tronWeb: any): string | undefined {
+    let address = asNonEmptyTrimmedString(tronWeb?.defaultAddress?.base58)
+    if (
+      !address &&
+      tronWeb?.defaultAddress?.hex &&
+      tronWeb.address &&
+      typeof tronWeb.address.fromHex === 'function'
+    ) {
+      try {
+        address = asNonEmptyTrimmedString(
+          tronWeb.address.fromHex(tronWeb.defaultAddress.hex),
+        )
+      } catch {
+        /* ignore */
+      }
+    }
+    return address
+  }
+
+  private async pollTronAddress(tronWeb: any, attempts: number): Promise<string | undefined> {
+    for (let i = 0; i < attempts; i++) {
+      const address = this.readTronAddress(tronWeb)
+      if (address) return address
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+    return undefined
+  }
+
+  /**
+   * Prefer modern window.tron + eth_requestAccounts, then legacy tron_requestAccounts.
+   * Locked / pending / unknown must not be treated as user-reject (SPA was swallowing that).
+   */
+  private async requestTronAuthorization(w: any): Promise<void> {
+    const REQUEST_MS = 120_000
+
+    if (w.tron && typeof w.tron.request === 'function') {
+      try {
+        console.info('[TronLink] authorize via window.tron eth_requestAccounts')
+        const result = await withTimeout(
+          w.tron.request({ method: 'eth_requestAccounts' }),
+          REQUEST_MS,
+          'tron eth_requestAccounts',
+        )
+        const interp = interpretTronAuthorizeResult(result)
+        console.info('[TronLink] tron eth_requestAccounts result', { interp, result })
+        if (interp.kind === 'ok' || interp.kind === 'pending') return
+        if (interp.kind === 'rejected') throw new ConnectionRejectedError(this.type)
+        if (interp.kind === 'locked') {
+          throw new Error('TronLink is locked — unlock the extension and try again')
+        }
+      } catch (error: any) {
+        if (error instanceof ConnectionRejectedError) throw error
+        if (/locked/i.test(String(error?.message ?? ''))) throw error
+        if (
+          error?.code === 4001 ||
+          /user rejected|rejected by user/i.test(String(error?.message ?? ''))
+        ) {
+          throw new ConnectionRejectedError(this.type)
+        }
+        console.warn('[TronLink] window.tron authorize failed, trying legacy tronLink', error)
+      }
+    }
+
+    if (w.tronLink && typeof w.tronLink.request === 'function') {
+      console.info('[TronLink] authorize via tronLink.tron_requestAccounts')
+      const result = await withTimeout(
+        w.tronLink.request({ method: 'tron_requestAccounts' }),
+        REQUEST_MS,
+        'tron_requestAccounts',
+      )
+      const interp = interpretTronAuthorizeResult(result)
+      console.info('[TronLink] tron_requestAccounts result', { interp, result })
+      if (interp.kind === 'ok' || interp.kind === 'pending') return
+      if (interp.kind === 'rejected') throw new ConnectionRejectedError(this.type)
+      if (interp.kind === 'locked') {
+        throw new Error('TronLink is locked — unlock the extension and try again')
+      }
+      // Unknown shape — continue and poll defaultAddress.
+      return
+    }
+
+    console.warn('[TronLink] no request() on window.tron / window.tronLink — polling address only')
   }
 
   /**
@@ -242,15 +314,15 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
       // Use signMessageV2 for plain text message signing (not transaction signing)
       // This is equivalent to personal_sign in EVM
       if (typeof tronWeb.trx.signMessageV2 === 'function') {
-        // signMessageV2 returns a hex signature
+        // signMessageV2 returns a hex signature (sometimes wrapped)
         const signature = await tronWeb.trx.signMessageV2(message)
-        return signature
+        return coerceWalletHexString(signature, 'TronLink signature')
       } else {
         // Fallback to older method if signMessageV2 not available
-        // Note: This might not work correctly for message signing
+        // Note: trx.sign() on a string may return a signed tx object, not hex.
         console.warn('[TronLink] signMessageV2 not available, falling back to sign()')
         const signature = await tronWeb.trx.sign(message)
-        return signature
+        return coerceWalletHexString(signature, 'TronLink signature')
       }
     } catch (error: any) {
       if (error.message?.includes('User rejected') || error.message?.includes('Confirmation declined')) {
@@ -299,14 +371,118 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
   }
 
   /**
+   * Unified send API (same `{ to, data, value }` shape as EVM adapters).
+   * TronLink has no eth_sendTransaction — build via triggerSmartContract, then sign + broadcast.
+   *
+   * Build happens *before* the wallet popup. TRON default expiration is ~60s from build,
+   * so we extend the unsigned tx and rebuild once on "Transaction expired" (user stared
+   * at the confirm sheet too long — wallets do not rebuild on tap).
+   */
+  async sendTransaction(transaction: any): Promise<string> {
+    this.ensureConnected()
+    const tronWeb = this.getTronWeb()
+    const owner = this.currentAccount!.nativeAddress
+
+    if (transaction?.raw_data || (transaction?.txID && !transaction?.to)) {
+      const unsigned = await extendUnsignedTronTxExpiration(tronWeb, transaction)
+      return this.broadcastSignedTronTx(await tronWeb.trx.sign(unsigned))
+    }
+
+    const to = String(transaction?.to ?? '').trim()
+    const data = String(transaction?.data ?? '').trim()
+    if (!to) {
+      throw new Error('sendTransaction requires `to`')
+    }
+
+    const callValue = callValueSun(transaction?.value)
+    if (!data || data === '0x') {
+      if (callValue <= 0) throw new Error('sendTransaction requires data or a positive value')
+      const buildTrx = async () => {
+        const unsigned = await tronWeb.transactionBuilder.sendTrx(
+          toTriggerContractBase58(tronWeb, to),
+          callValue,
+          owner,
+        )
+        return extendUnsignedTronTxExpiration(tronWeb, unsigned)
+      }
+      return this.signBuiltTronTxWithExpireRetry(tronWeb, buildTrx)
+    }
+
+    const contractBase58 = toTriggerContractBase58(tronWeb, to)
+    const mode = tronTriggerModeFromCalldata(data)
+    // depositWithIntentAndSend burns ~1.2M energy + penalty; TronWeb default
+    // feeLimit 100 TRX ≈ 1e6 energy dies on LOG2 (OUT_OF_ENERGY). Default 150 TRX.
+    const feeLimitRaw = Number(transaction?.feeLimit)
+    const feeLimit =
+      Number.isFinite(feeLimitRaw) && feeLimitRaw > 0 ? Math.floor(feeLimitRaw) : 150_000_000
+    const options = {
+      feeLimit,
+      callValue,
+      ...(mode.kind === 'rawParameter'
+        ? { rawParameter: mode.rawParameter }
+        : { input: mode.input }),
+    }
+    const buildContract = async () => {
+      const built = (await retryWithBackoff(
+        () =>
+          tronWeb.transactionBuilder.triggerSmartContract(
+            contractBase58,
+            mode.kind === 'rawParameter' ? mode.functionSelector : '',
+            options,
+            [],
+            owner,
+          ),
+        3,
+        500,
+      )) as { transaction?: unknown; result?: { message?: string } }
+      if (!built?.transaction) {
+        throw new Error(built?.result?.message || 'Failed to build TRON transaction')
+      }
+      return extendUnsignedTronTxExpiration(tronWeb, built.transaction)
+    }
+    return this.signBuiltTronTxWithExpireRetry(tronWeb, buildContract)
+  }
+
+  /** Build → sign → broadcast; on expiration, rebuild once with a fresh ref block. */
+  private async signBuiltTronTxWithExpireRetry(
+    tronWeb: { trx: { sign: (tx: unknown) => Promise<any> } },
+    buildUnsigned: () => Promise<unknown>,
+  ): Promise<string> {
+    let lastErr: unknown
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const unsigned = await buildUnsigned()
+      try {
+        return await this.broadcastSignedTronTx(await tronWeb.trx.sign(unsigned))
+      } catch (err) {
+        lastErr = err
+        if (attempt === 0 && isTronTransactionExpiredError(err)) continue
+        throw err
+      }
+    }
+    throw lastErr instanceof Error ? lastErr : new Error(String(lastErr ?? 'TRON sign failed'))
+  }
+
+  private async broadcastSignedTronTx(signedTx: { txID?: string; [k: string]: unknown }): Promise<string> {
+    const signErr = walletErrorMessageFromEnvelope(signedTx)
+    if (signErr) throw new Error(signErr)
+    const signedTxId = typeof signedTx?.txID === 'string' ? signedTx.txID : ''
+    const tw = this.getTronWeb()
+    return publishAfterTronLinkSign({
+      signedTxId,
+      hasTronLink: detectTronLinkInjector(),
+      getTransaction: (id) => tw.trx.getTransaction(id),
+      sendRaw: () => tw.trx.sendRawTransaction(signedTx),
+      waitMs: 800,
+    })
+  }
+
+  /**
    * 读取合约
    * 参考 webserver 的实现，使用 TronWeb 合约实例的标准 call() 方法
    * 带 TronGrid 限流 + 429 重试
    */
   async readContract<T = any>(params: ContractReadParams): Promise<T> {
     this.ensureConnected()
-
-    await tronApiRateLimiter.waitForNextCall()
 
     const doRead = async (): Promise<T> => {
       const tronWeb = this.getTronWeb()
@@ -347,9 +523,6 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
   async writeContract(params: ContractWriteParams): Promise<string> {
     this.ensureConnected()
 
-    // 等待速率限制（每次 TRON API 调用之间至少间隔 0.2 秒，避免 429 错误）
-    await tronApiRateLimiter.waitForNextCall()
-
     try {
       const tronWeb = this.getTronWeb()
       
@@ -389,10 +562,13 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
       console.log('[TronLink] Calling with args:', params.args)
       
       // 准备交易参数
-      // TRON 链的 FeeLimit 固定为 100 TRX（100,000,000 SUN）
-      const TRON_FEE_LIMIT = 100_000_000 // 100 TRX = 100,000,000 SUN
+      // TRON FeeLimit: 150 TRX default (was 100). depositWithIntentAndSend needs
+      // ~1.2M energy; 100 TRX feeLimit dies on LOG2 (OUT_OF_ENERGY).
+      const feeLimitRaw = Number((params as { feeLimit?: number }).feeLimit)
+      const TRON_FEE_LIMIT =
+        Number.isFinite(feeLimitRaw) && feeLimitRaw > 0 ? Math.floor(feeLimitRaw) : 150_000_000
       const options = {
-        feeLimit: TRON_FEE_LIMIT, // 固定为 100 TRX 的能量限制
+        feeLimit: TRON_FEE_LIMIT,
         callValue: params.value || 0, // 发送的 TRX 数量（单位：SUN）
       }
       
@@ -613,29 +789,7 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
       // 请求用户签名（参考 webserver 的实现）
       console.log('[TronLink] Requesting user signature...')
       const signedTx = await tronWeb.trx.sign(tx.transaction)
-      console.log('[TronLink] Transaction signed:', signedTx)
-      
-      // ✅ 从签名的交易中提取 txID（这是最可靠的方式，参考 webserver）
-      const txID = signedTx.txID
-      console.log('[TronLink] Transaction hash (txID):', txID)
-      
-      // 广播交易（参考 webserver 的实现）
-      console.log('[TronLink] Broadcasting transaction...')
-      const broadcast = await tronWeb.trx.sendRawTransaction(signedTx)
-      console.log('[TronLink] Broadcast result:', broadcast)
-      
-      // 验证广播结果
-      if (broadcast && broadcast.result === true) {
-        // 广播成功，返回交易哈希
-        return txID || broadcast.txid || ''
-      } else {
-        // 广播失败，但如果有 txID，仍然返回（交易可能已经上链）
-        if (txID) {
-          console.warn('[TronLink] Broadcast returned false but txID exists:', txID)
-          return txID
-        }
-        throw new Error(broadcast?.message || 'Transaction broadcast failed')
-      }
+      return this.broadcastSignedTronTx(signedTx)
     } catch (error: any) {
       console.error('Write contract error:', error)
       
@@ -653,43 +807,52 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
   async waitForTransaction(txHash: string, _confirmations: number = 1): Promise<TransactionReceipt> {
     try {
       const tronWeb = this.getTronWeb()
-      
-      // 等待交易确认
-      let attempts = 0
-      const maxAttempts = 60 // 最多等待 60 秒
-      
-      while (attempts < maxAttempts) {
+      // TronLink's injected.js already hits api.trongrid.io on sign/broadcast.
+      // Do not poll immediately or double-call getTransaction — free tier is 3 rps.
+      await new Promise((resolve) => setTimeout(resolve, 8000))
+      const deadline = Date.now() + 180_000
+      let delayMs = 8000
+
+      while (Date.now() < deadline) {
         try {
-          await tronApiRateLimiter.waitForNextCall()
           const txInfo = await tronWeb.trx.getTransactionInfo(txHash)
-          
-          if (txInfo && txInfo.id) {
-            // 交易已确认
+
+          if (tronInfoLooksReady(txInfo)) {
             const receipt: TransactionReceipt = {
               transactionHash: txHash,
               blockNumber: txInfo.blockNumber || 0,
               blockHash: txInfo.blockHash || '',
               from: this.currentAccount!.nativeAddress,
               to: txInfo.contract_address || '',
-              status: txInfo.receipt?.result === 'SUCCESS' ? 'success' : 'failed',
+              status: tronInfoFailed(txInfo) ? 'failed' : 'success',
               gasUsed: (txInfo.receipt?.energy_usage_total || 0).toString(),
               logs: txInfo.log || [],
             }
-            
+
             if (receipt.status === 'failed') {
-              throw new TransactionFailedError(txHash, 'Transaction failed on Tron network')
+              const reason = String(txInfo?.receipt?.result || 'FAILED').toUpperCase()
+              throw new TransactionFailedError(
+                txHash,
+                reason === 'OUT_OF_ENERGY'
+                  ? 'OUT_OF_ENERGY: feeLimit/energy exhausted before contract finished'
+                  : `Transaction failed on Tron network (${reason})`,
+              )
             }
-            
+
             return receipt
           }
         } catch (error) {
-          // 交易可能还未确认，继续等待
+          if (error instanceof TransactionFailedError) throw error
+          if (isRateLimitError(error)) {
+            await new Promise((resolve) => setTimeout(resolve, 12000))
+            continue
+          }
         }
-        
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        attempts++
+
+        await new Promise((resolve) => setTimeout(resolve, delayMs))
+        delayMs = Math.min(delayMs + 2000, 15000)
       }
-      
+
       throw new Error('Transaction confirmation timeout')
     } catch (error: any) {
       throw new Error(`Failed to wait for transaction: ${error.message}`)
@@ -715,9 +878,11 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
       return undefined
     }
     const w = window as any
-    // 优先使用 window.tronWeb（所有 TronWeb 兼容钱包都提供）
-    // 如果没有，则尝试 window.tronLink.tronWeb（TronLink 特定）
-    return w.tronWeb || w.tronLink?.tronWeb
+    // Modern TronLink: usable tronWeb lives on window.tron after authorize.
+    // Legacy: window.tronWeb / window.tronLink.tronWeb.
+    const fromTron =
+      w.tron?.tronWeb && w.tron.tronWeb !== false ? w.tron.tronWeb : undefined
+    return fromTron || w.tronWeb || w.tronLink?.tronWeb
   }
 
   /**
@@ -728,7 +893,7 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
     if (!provider) {
       throw new Error('未检测到 TronWeb 兼容的钱包。请安装 TronLink 或其他 TronWeb 兼容的钱包。')
     }
-    return provider
+    return throttleTronWeb(provider)
   }
 
   /**
@@ -740,33 +905,34 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
 
   /**
    * 设置事件监听
+   *
+   * TronLink 各版本事件源不一致：优先 TIP-1193 `window.tron`，兼容旧 `tronLink.on`，
+   * 并始终启用轮询兜底（仅依赖 on 时，切账户经常不更新）。
    */
   protected setupEventListeners(): void {
-    // TronWeb 兼容钱包事件监听
     if (typeof window === 'undefined') return
 
     const w = window as any
-    
-    // TronWeb 兼容钱包的事件监听方式可能因钱包而异
-    // TronLink 使用 tronLink.on，其他钱包可能使用不同的方式
-    try {
-      if (w.tronLink && typeof w.tronLink.on === 'function') {
-        // TronLink 特定的事件监听
-        w.tronLink.on('accountsChanged', this.handleAccountsChanged)
-        w.tronLink.on('disconnect', this.handleDisconnect)
-      } else if (w.tronWeb && w.tronWeb.eventServer) {
-        // 其他 TronWeb 兼容钱包可能使用 eventServer
-        // 备用方案：使用轮询检测账户变化
-        this.startPolling()
-      } else {
-        // 如果没有事件监听支持，使用轮询
-        this.startPolling()
+
+    const attach = (target: any, label: string) => {
+      if (!target || typeof target.on !== 'function') return false
+      try {
+        target.on('accountsChanged', this.handleAccountsChanged)
+        if (typeof target.on === 'function') {
+          target.on('disconnect', this.handleDisconnect)
+        }
+        return true
+      } catch (error) {
+        console.warn(`[TronLink] ${label} event attach failed:`, error)
+        return false
       }
-    } catch (error) {
-      console.warn('TronWeb 钱包事件监听设置失败，使用轮询方式:', error)
-      // 降级到轮询
-      this.startPolling()
     }
+
+    attach(w.tron, 'window.tron')
+    attach(w.tronLink, 'window.tronLink')
+
+    // Backup: defaultAddress can change without a reliable event on some builds.
+    this.startPolling()
   }
 
   /**
@@ -777,16 +943,23 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
 
     const w = window as any
 
-    try {
-      if (w.tronLink && typeof w.tronLink.off === 'function') {
-        // TronLink 特定的事件移除
-        w.tronLink.off('accountsChanged', this.handleAccountsChanged)
-        w.tronLink.off('disconnect', this.handleDisconnect)
+    const detach = (target: any) => {
+      if (!target) return
+      try {
+        if (typeof target.removeListener === 'function') {
+          target.removeListener('accountsChanged', this.handleAccountsChanged)
+          target.removeListener('disconnect', this.handleDisconnect)
+        } else if (typeof target.off === 'function') {
+          target.off('accountsChanged', this.handleAccountsChanged)
+          target.off('disconnect', this.handleDisconnect)
+        }
+      } catch (error) {
+        console.warn('TronWeb wallet event detach failed:', error)
       }
-    } catch (error) {
-      console.warn('TronWeb 钱包事件监听移除失败:', error)
     }
 
+    detach(w.tron)
+    detach(w.tronLink)
     this.stopPolling()
   }
 
@@ -801,22 +974,23 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
 
     this.lastKnownAddress = this.currentAccount?.nativeAddress || null
 
-    this.pollingInterval = setInterval(async () => {
+    this.pollingInterval = setInterval(() => {
       try {
         const tronWeb = this.getTronWeb()
-        const currentAddress = tronWeb.defaultAddress?.base58
+        // Locked TronLink may set base58 to false — never treat as string.
+        const currentAddress = this.readTronAddress(tronWeb)
 
         if (currentAddress && currentAddress !== this.lastKnownAddress) {
           this.lastKnownAddress = currentAddress
-          this.handleAccountsChanged({ address: { base58: currentAddress } })
+          this.handleAccountsChanged([currentAddress])
         } else if (!currentAddress && this.lastKnownAddress) {
           this.lastKnownAddress = null
-          this.handleAccountsChanged(null)
+          this.handleAccountsChanged([])
         }
-      } catch (error) {
-        // 忽略轮询错误
+      } catch {
+        // ignore polling errors
       }
-    }, 2000) // 每 2 秒检查一次
+    }, 1500)
   }
 
   private stopPolling(): void {
@@ -827,27 +1001,34 @@ export class TronLinkAdapter extends BrowserWalletAdapter {
   }
 
   /**
-   * 处理账户变化
+   * 处理账户变化（TIP-1193 string[] + legacy object）
    */
-  private handleAccountsChanged = (data: any) => {
-    if (!data || !data.address) {
-      // 用户断开连接
+  private handleAccountsChanged = (data: unknown) => {
+    const address = resolveTronAccountsChangedAddress(data)
+
+    if (!address) {
       this.setState(WalletState.DISCONNECTED)
       this.setAccount(null)
       this.emitAccountChanged(null)
-    } else {
-      // 用户切换账户
-      const address = data.address.base58 || data.address
-      const account: Account = {
-        universalAddress: createUniversalAddress(this.currentAccount!.chainId, address),
-        nativeAddress: address,
-        chainId: this.currentAccount!.chainId,
-        chainType: ChainType.TRON,
-        isActive: true,
-      }
-      this.setAccount(account)
-      this.emitAccountChanged(account)
+      return
     }
+
+    if (this.currentAccount?.nativeAddress === address) {
+      this.lastKnownAddress = address
+      return
+    }
+
+    const chainId = this.currentAccount?.chainId ?? TronLinkAdapter.TRON_MAINNET_CHAIN_ID
+    const account: Account = {
+      universalAddress: createUniversalAddress(chainId, address),
+      nativeAddress: address,
+      chainId,
+      chainType: ChainType.TRON,
+      isActive: true,
+    }
+    this.lastKnownAddress = address
+    this.setAccount(account)
+    this.emitAccountChanged(account)
   }
 
   /**

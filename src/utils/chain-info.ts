@@ -1,5 +1,9 @@
 /**
  * Chain information constants
+ *
+ * EVM Chain ID: wallet / RPC / MetaMask `eth_chainId` (e.g. Arbitrum One = 42161).
+ * SLIP-44 ID: Enclave 系统链标识；L2 等无官方 SLIP-44 的链使用 1000000 + EVM Chain ID
+ *（与 @enclave-hq/chain-utils 一致，例如 Arbitrum = 1042161）。
  */
 
 import { 
@@ -8,6 +12,48 @@ import {
   slip44ToNative,
   ChainInfo as ChainUtilsChainInfo
 } from '@enclave-hq/chain-utils'
+
+/** Custom SLIP-44 for EVM chains without an official SLIP-44 coin type */
+export function slip44FromEvmChainId(evmChainId: number): number {
+  return 1_000_000 + evmChainId
+}
+
+/** EVM Chain ID from custom SLIP-44 (1000000 + evm) */
+export function evmChainIdFromCustomSlip44(slip44: number): number | null {
+  if (slip44 >= 1_000_000 && slip44 < 2_000_000) {
+    return slip44 - 1_000_000
+  }
+  return null
+}
+
+/** Well-known EVM native chain IDs */
+export const EVM_CHAIN_ID = {
+  ETHEREUM: 1,
+  BSC: 56,
+  BSC_TESTNET: 97,
+  POLYGON: 137,
+  POLYGON_AMOY: 80002,
+  TRON: 195,
+  ARBITRUM_ONE: 42161,
+  ARBITRUM_SEPOLIA: 421614,
+  OPTIMISM: 10,
+  BASE: 8453,
+  AVALANCHE_C: 43114,
+  SEPOLIA: 11155111,
+} as const
+
+/** Well-known SLIP-44 chain IDs (Enclave / chain-utils) */
+export const SLIP44_CHAIN_ID = {
+  ETHEREUM: 60,
+  BSC: 714,
+  POLYGON: 966,
+  TRON: 195,
+  ARBITRUM_ONE: 1042161,
+  ARBITRUM_SEPOLIA: 10421614,
+  OPTIMISM: 1000010,
+  BASE: 1008453,
+  AVALANCHE_C: 9000,
+} as const
 
 /**
  * Extended chain information interface (adds RPC and explorer URLs)
@@ -151,7 +197,7 @@ export const CHAIN_INFO: Record<number, ChainInfo> = {
   // Arbitrum
   42161: {
     id: 42161,
-    slip44: 1042161,  // Custom SLIP-44 (1000000 + 42161)
+    slip44: SLIP44_CHAIN_ID.ARBITRUM_ONE,
     name: 'Arbitrum One',
     chainType: ChainType.EVM,
     symbol: 'ETH',
@@ -160,14 +206,32 @@ export const CHAIN_INFO: Record<number, ChainInfo> = {
       symbol: 'ETH',
       decimals: 18,
     },
-    rpcUrls: ['https://arb1.arbitrum.io/rpc'],
+    rpcUrls: [
+      'https://arb1.arbitrum.io/rpc',
+      'https://rpc.ankr.com/arbitrum',
+    ],
     blockExplorerUrls: ['https://arbiscan.io'],
+  },
+
+  421614: {
+    id: 421614,
+    slip44: SLIP44_CHAIN_ID.ARBITRUM_SEPOLIA,
+    name: 'Arbitrum Sepolia',
+    chainType: ChainType.EVM,
+    symbol: 'ETH',
+    nativeCurrency: {
+      name: 'Sepolia Ether',
+      symbol: 'ETH',
+      decimals: 18,
+    },
+    rpcUrls: ['https://sepolia-rollup.arbitrum.io/rpc'],
+    blockExplorerUrls: ['https://sepolia.arbiscan.io'],
   },
   
   // Optimism
   10: {
     id: 10,
-    slip44: 1000010,  // Custom SLIP-44 (1000000 + 10)
+    slip44: SLIP44_CHAIN_ID.OPTIMISM,
     name: 'Optimism',
     chainType: ChainType.EVM,
     symbol: 'ETH',
@@ -178,6 +242,25 @@ export const CHAIN_INFO: Record<number, ChainInfo> = {
     },
     rpcUrls: ['https://mainnet.optimism.io'],
     blockExplorerUrls: ['https://optimistic.etherscan.io'],
+  },
+
+  // Base
+  8453: {
+    id: 8453,
+    slip44: SLIP44_CHAIN_ID.BASE,
+    name: 'Base',
+    chainType: ChainType.EVM,
+    symbol: 'ETH',
+    nativeCurrency: {
+      name: 'Ether',
+      symbol: 'ETH',
+      decimals: 18,
+    },
+    rpcUrls: [
+      'https://mainnet.base.org',
+      'https://base.llamarpc.com',
+    ],
+    blockExplorerUrls: ['https://basescan.org'],
   },
   
   // Avalanche
@@ -226,24 +309,79 @@ export function isTronChain(chainId: number): boolean {
 }
 
 /**
- * Get SLIP-44 ID from native chain ID
+ * Get SLIP-44 ID from EVM native chain ID (MetaMask / WalletConnect `chainId`).
  */
 export function getSlip44(chainId: number): number | null {
-  // Check local config first
   const localInfo = CHAIN_INFO[chainId]
   if (localInfo?.slip44) {
     return localInfo.slip44
   }
-  
-  // Fall back to chain-utils
   return nativeToSlip44(chainId)
 }
 
 /**
- * Get native chain ID from SLIP-44 ID
+ * Alias: EVM Chain ID → SLIP-44 (same as {@link getSlip44}).
+ */
+export function evmChainIdToSlip44(evmChainId: number): number | null {
+  return getSlip44(evmChainId)
+}
+
+/**
+ * Get EVM native chain ID from SLIP-44 ID.
  */
 export function getNativeChainId(slip44: number): number | string | null {
   return slip44ToNative(slip44)
+}
+
+/**
+ * Alias: SLIP-44 → EVM Chain ID when the native id is numeric.
+ */
+export function slip44ToEvmChainId(slip44: number): number | null {
+  const native = slip44ToNative(slip44)
+  return typeof native === 'number' ? native : null
+}
+
+/**
+ * Normalize an id that may be either EVM Chain ID or SLIP-44 to SLIP-44.
+ * Ethereum mainnet: EVM 1 → SLIP-44 60.
+ */
+export function normalizeToSlip44(chainId: number): number {
+  const fromEvm = getSlip44(chainId)
+  if (fromEvm != null) {
+    return fromEvm
+  }
+  if (getChainInfoBySlip44Id(chainId)) {
+    return chainId
+  }
+  return chainId
+}
+
+/**
+ * Normalize an id that may be either SLIP-44 or EVM Chain ID to EVM Chain ID.
+ */
+export function normalizeToEvmChainId(chainId: number): number {
+  const fromSlip = slip44ToEvmChainId(chainId)
+  if (fromSlip != null) {
+    return fromSlip
+  }
+  if (CHAIN_INFO[chainId]) {
+    return chainId
+  }
+  return chainId
+}
+
+/**
+ * Chain metadata by SLIP-44 id (from local CHAIN_INFO).
+ */
+export function getChainInfoBySlip44Id(slip44: number): ChainInfo | undefined {
+  return Object.values(CHAIN_INFO).find((c) => c.slip44 === slip44)
+}
+
+/**
+ * Whether this EVM chain id is in wallet-sdk CHAIN_INFO.
+ */
+export function isKnownEvmChain(chainId: number): boolean {
+  return CHAIN_INFO[chainId]?.chainType === ChainType.EVM
 }
 
 /**

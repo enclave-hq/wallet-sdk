@@ -19,7 +19,7 @@ import {
   WalletNotConnectedError,
 } from '../../core/errors'
 import { createUniversalAddress } from '../../utils/address/universal-address'
-import { IDeepLinkProvider } from './providers/base'
+import type { IDeepLinkProvider } from './providers/base'
 
 /**
  * Deep Link Provider Type

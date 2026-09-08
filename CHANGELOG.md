@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Arbitrum / L2 chain IDs**: Export `EVM_CHAIN_ID`, `SLIP44_CHAIN_ID`, and conversion helpers (`evmChainIdToSlip44`, `slip44ToEvmChainId`, `normalizeToSlip44`, `normalizeToEvmChainId`).
+- **Chains**: Arbitrum Sepolia (`421614`), Base mainnet (`8453`); extra Arbitrum RPC fallback.
+
+## [1.2.8] - 2026-09-02
+
+### Fixed
+- **TRON `feeLimit`**: `sendTransaction` / contract calls honor caller `feeLimit` (SUN). Default raised from 100 TRX (`1e8`) to 150 TRX so vault `depositWithIntentAndSend` is not capped at ~1e6 energy.
+
 ## [1.2.4] - 2025-12-01
 
 ### Added

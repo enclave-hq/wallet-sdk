@@ -63,6 +63,10 @@ export abstract class WalletAdapter extends EventEmitter implements IWalletAdapt
     throw new MethodNotSupportedError('signTransaction', this.type)
   }
 
+  sendTransaction?(_transaction: any): Promise<string> {
+    throw new MethodNotSupportedError('sendTransaction', this.type)
+  }
+
   signTypedData?(_typedData: any): Promise<string> {
     throw new MethodNotSupportedError('signTypedData', this.type)
   }

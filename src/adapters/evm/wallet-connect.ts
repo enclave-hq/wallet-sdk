@@ -23,7 +23,8 @@ import {
   TransactionFailedError,
   ConfigurationError,
 } from '../../core/errors'
-import { getChainInfo } from '../../utils/chain-info'
+import { evmPersonalSignParams, toEip1193Quantity } from '../../utils/hex'
+import { getChainInfo, normalizeToEvmChainId } from '../../utils/chain-info'
 
 /**
  * WalletConnect Adapter
@@ -850,7 +851,7 @@ export class WalletConnectAdapter extends WalletAdapter {
 
       const signature = await this.provider.request({
         method: 'personal_sign',
-        params: [message, this.currentAccount!.nativeAddress],
+        params: evmPersonalSignParams(message, this.currentAccount!.nativeAddress),
       })
 
       // In Telegram Mini App, close any wc:// deep link popups after signing
@@ -907,16 +908,16 @@ export class WalletConnectAdapter extends WalletAdapter {
       const tx = {
         from: this.currentAccount!.nativeAddress,
         to: transaction.to,
-        value: transaction.value ? `0x${BigInt(transaction.value).toString(16)}` : undefined,
+        value: toEip1193Quantity(transaction.value),
         data: transaction.data || '0x',
-        gas: transaction.gas ? `0x${BigInt(transaction.gas).toString(16)}` : undefined,
-        gasPrice: transaction.gasPrice && transaction.gasPrice !== 'auto' 
-          ? `0x${BigInt(transaction.gasPrice).toString(16)}` : undefined,
-        maxFeePerGas: transaction.maxFeePerGas 
-          ? `0x${BigInt(transaction.maxFeePerGas).toString(16)}` : undefined,
-        maxPriorityFeePerGas: transaction.maxPriorityFeePerGas 
-          ? `0x${BigInt(transaction.maxPriorityFeePerGas).toString(16)}` : undefined,
-        nonce: transaction.nonce !== undefined 
+        gas: toEip1193Quantity(transaction.gas),
+        gasPrice:
+          transaction.gasPrice && transaction.gasPrice !== 'auto'
+            ? toEip1193Quantity(transaction.gasPrice)
+            : undefined,
+        maxFeePerGas: toEip1193Quantity(transaction.maxFeePerGas),
+        maxPriorityFeePerGas: toEip1193Quantity(transaction.maxPriorityFeePerGas),
+        nonce: transaction.nonce !== undefined
           ? `0x${transaction.nonce.toString(16)}` : undefined,
         chainId: transaction.chainId || this.currentAccount!.chainId,
       }
@@ -933,6 +934,50 @@ export class WalletConnectAdapter extends WalletAdapter {
     } catch (error: any) {
       if (error.code === 4001 || error.message?.includes('rejected')) {
         throw new SignatureRejectedError('Transaction signature was rejected by user')
+      }
+      throw error
+    }
+  }
+
+  /**
+   * Send transaction (broadcast via wallet)
+   */
+  async sendTransaction(transaction: any): Promise<string> {
+    this.ensureConnected()
+
+    try {
+      if (!this.provider) {
+        throw new Error('Provider not initialized')
+      }
+
+      const tx = {
+        from: this.currentAccount!.nativeAddress,
+        to: transaction.to,
+        value: toEip1193Quantity(transaction.value),
+        data: transaction.data || '0x',
+        gas: toEip1193Quantity(transaction.gas),
+        gasPrice:
+          transaction.gasPrice && transaction.gasPrice !== 'auto'
+            ? toEip1193Quantity(transaction.gasPrice)
+            : undefined,
+        maxFeePerGas: toEip1193Quantity(transaction.maxFeePerGas),
+        maxPriorityFeePerGas: toEip1193Quantity(transaction.maxPriorityFeePerGas),
+        nonce: transaction.nonce !== undefined
+          ? `0x${transaction.nonce.toString(16)}` : undefined,
+        chainId: `0x${normalizeToEvmChainId(transaction.chainId ?? this.currentAccount!.chainId).toString(16)}`,
+      }
+
+      const hash = await this.provider.request({
+        method: 'eth_sendTransaction',
+        params: [tx],
+      })
+
+      this.closeTelegramDeepLinkPopup()
+
+      return hash as string
+    } catch (error: any) {
+      if (error.code === 4001 || error.message?.includes('rejected')) {
+        throw new SignatureRejectedError('Transaction was rejected by user')
       }
       throw error
     }

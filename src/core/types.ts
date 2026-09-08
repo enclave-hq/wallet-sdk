@@ -119,6 +119,7 @@ export interface IWalletAdapter extends ISigner {
   // 签名
   signMessage(message: string): Promise<string>
   signTransaction?(transaction: Transaction): Promise<string>
+  sendTransaction?(transaction: Transaction): Promise<string>
   signTypedData?(typedData: any): Promise<string>
   
   // 链切换（仅 EVM 支持）
@@ -170,9 +171,9 @@ export interface ContractWriteParams extends ContractReadParams {
  */
 export interface EVMTransaction {
   to: string
-  value?: string | bigint
+  value?: string | number | bigint
   data?: string
-  gas?: string | bigint
+  gas?: string | number | bigint
   gasPrice?: string | bigint
   maxFeePerGas?: string | bigint
   maxPriorityFeePerGas?: string | bigint

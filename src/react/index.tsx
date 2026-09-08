@@ -12,6 +12,7 @@ export { useConnect } from './hooks/useConnect'
 export { useDisconnect } from './hooks/useDisconnect'
 export { useSignMessage } from './hooks/useSignMessage'
 export { useSignTransaction } from './hooks/useSignTransaction'
+export { useSendTransaction } from './hooks/useSendTransaction'
 export { useQRCodeSigner } from './hooks/useQRCodeSigner'
 
 export type { UseAccountResult } from './hooks/useAccount'
@@ -19,6 +20,7 @@ export type { UseConnectResult } from './hooks/useConnect'
 export type { UseDisconnectResult } from './hooks/useDisconnect'
 export type { UseSignMessageResult } from './hooks/useSignMessage'
 export type { UseSignTransactionResult } from './hooks/useSignTransaction'
+export type { UseSendTransactionResult } from './hooks/useSendTransaction'
 export type { UseQRCodeSignerResult } from './hooks/useQRCodeSigner'
 
 // Components

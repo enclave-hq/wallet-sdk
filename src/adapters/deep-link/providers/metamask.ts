@@ -8,7 +8,7 @@
  */
 
 import { ChainType } from '../../../core/types'
-import { IDeepLinkProvider, DeepLinkSignMessageParams, DeepLinkSignTransactionParams, DeepLinkConnectParams } from './base'
+import type { IDeepLinkProvider, DeepLinkSignMessageParams, DeepLinkSignTransactionParams, DeepLinkConnectParams } from './base'
 
 export class MetaMaskDeepLinkProvider implements IDeepLinkProvider {
   readonly name = 'MetaMask'

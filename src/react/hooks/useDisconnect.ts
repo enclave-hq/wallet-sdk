@@ -8,6 +8,7 @@ import { useWallet } from '../WalletContext'
 
 export interface UseDisconnectResult {
   disconnect: () => Promise<void>
+  disconnectAll: () => Promise<void>
   isDisconnecting: boolean
   error: Error | null
 }
@@ -16,7 +17,7 @@ export interface UseDisconnectResult {
  * useDisconnect Hook
  */
 export function useDisconnect(): UseDisconnectResult {
-  const { disconnect: contextDisconnect } = useWallet()
+  const { disconnect: contextDisconnect, disconnectAll: contextDisconnectAll } = useWallet()
   const [isDisconnecting, setIsDisconnecting] = useState(false)
   const [error, setError] = useState<Error | null>(null)
 
@@ -35,8 +36,24 @@ export function useDisconnect(): UseDisconnectResult {
     }
   }
 
+  const disconnectAll = async (): Promise<void> => {
+    setIsDisconnecting(true)
+    setError(null)
+
+    try {
+      await contextDisconnectAll()
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err))
+      setError(error)
+      throw error
+    } finally {
+      setIsDisconnecting(false)
+    }
+  }
+
   return {
     disconnect,
+    disconnectAll,
     isDisconnecting,
     error,
   }

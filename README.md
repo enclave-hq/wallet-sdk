@@ -151,11 +151,30 @@ function SignButton() {
 A chain-agnostic address format: `chainId:address`
 
 ```typescript
-// Example:
+// Example (prefix is EVM Chain ID from the connected wallet):
 "1:0x1234..." // Ethereum Mainnet
 "56:0x5678..." // BSC Mainnet
+"42161:0xabcd..." // Arbitrum One
 "195:TJmm..." // Tron Mainnet
 ```
+
+### EVM Chain ID vs SLIP-44
+
+Wallets expose **EVM Chain ID** (e.g. Arbitrum One `42161`). Enclave backends and tasks often use **SLIP-44** (Arbitrum `1042161` = `1000000 + 42161`). Convert at the app boundary:
+
+```typescript
+import {
+  evmChainIdToSlip44,
+  slip44ToEvmChainId,
+  EVM_CHAIN_ID,
+  SLIP44_CHAIN_ID,
+} from '@enclave-hq/wallet-sdk'
+
+evmChainIdToSlip44(EVM_CHAIN_ID.ARBITRUM_ONE) // 1042161
+slip44ToEvmChainId(SLIP44_CHAIN_ID.ARBITRUM_ONE) // 42161
+```
+
+Predefined RPC / explorer metadata for Arbitrum, Base, Optimism, and other chains lives in `CHAIN_INFO` / `getChainInfo(chainId)`.
 
 ### Primary Wallet + Connected Wallets Pool
 

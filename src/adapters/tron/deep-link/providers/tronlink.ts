@@ -5,7 +5,7 @@
  * 参考文档: https://docs.tronlink.org/zh/mobile/deeplink
  */
 
-import { IDeepLinkProvider, DeepLinkSignMessageParams, DeepLinkSignTransactionParams, DeepLinkConnectParams } from './base'
+import type { IDeepLinkProvider, DeepLinkSignMessageParams, DeepLinkSignTransactionParams, DeepLinkConnectParams } from './base'
 
 export class TronLinkDeepLinkProvider implements IDeepLinkProvider {
   readonly name = 'TronLink'
